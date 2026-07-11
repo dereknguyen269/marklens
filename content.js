@@ -17,6 +17,8 @@
           }
           if (msg.mode) {
             existingBox.classList.toggle(NS + '-sidebar', msg.mode === 'sidebar');
+            if (msg.mode === 'sidebar' && existingBox._enableLivePreview) existingBox._enableLivePreview();
+            if (msg.mode !== 'sidebar' && existingBox._disableLivePreview) existingBox._disableLivePreview();
           }
           existingBox.style.display = 'flex';
         }
@@ -397,6 +399,8 @@
       #${NS}-body code{background:var(--md-code-bg,#f0f2f5);color:var(--md-code-text,#1f2328);padding:.15em .4em;border-radius:4px;font-family:Consolas,Menlo,monospace;font-size:.9em;}
       #${NS}-body pre{background:var(--md-pre-bg,#f0f2f5);padding:12px 14px;border-radius:8px;overflow:auto;}
       #${NS}-body pre code{background:none;padding:0;color:inherit;}
+      #${NS}-body pre code.hljs{background:transparent;}
+      #${NS}-body .hljs{background:transparent;padding:0;margin:0;}
       #${NS}-body blockquote{margin:.6em 0;padding:.2em 1em;border-left:3px solid var(--md-quote-border,#4f46e5);color:var(--md-quote-color,#656d76);}
       #${NS}-body ul,#${NS}-body ol{padding-left:1.4em;margin:.5em 0;}
       #${NS}-body li{margin:.2em 0;}
@@ -523,6 +527,7 @@
       box.style.width = config.width + 'px';
       box.style.height = config.height + 'px';
     }
+    if (isSidebar) enableLivePreview(); else disableLivePreview();
   }
 
   function applyConfig() {
@@ -580,7 +585,8 @@
     }
   }
 
-  closeBtn.addEventListener('click', function () { box.remove(); });
+  function closeBox() { disableLivePreview(); box.remove(); }
+  closeBtn.addEventListener('click', closeBox);
 
   // Mode toggle: popup <-> sidebar.
   modeBtn.addEventListener('click', function () {
@@ -591,7 +597,7 @@
 
   // Traffic-light buttons
   var tlClose = box.querySelector('.' + NS + '-tl-close');
-  if (tlClose) tlClose.addEventListener('click', function () { box.remove(); });
+  if (tlClose) tlClose.addEventListener('click', closeBox);
 
   // Theme selector — apply + persist.
   themeSel.addEventListener('change', function () {
@@ -621,7 +627,7 @@
   // Esc to close.
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && document.getElementById(NS + '-box')) {
-      box.remove();
+      closeBox();
     }
   });
 
@@ -692,6 +698,41 @@
       saveConfig();
     }
   });
+
+  // ── Live selection preview (sidebar only) ──
+  var livePreviewActive = false;
+  var selTimer = null;
+  var titleEl = box.querySelector('#' + NS + '-title');
+
+  function onLiveSelectionChange() {
+    if (!livePreviewActive) return;
+    if (selTimer) clearTimeout(selTimer);
+    selTimer = setTimeout(function () {
+      var sel = window.getSelection();
+      if (!sel || !sel.rangeCount) return;
+      var text = sel.toString();
+      if (!text || text.trim().length < 1) return;
+      render(text);
+    }, 200);
+  }
+
+  function enableLivePreview() {
+    if (livePreviewActive) return;
+    livePreviewActive = true;
+    document.addEventListener('selectionchange', onLiveSelectionChange);
+    if (titleEl) titleEl.textContent = 'Live Preview: select text on page';
+  }
+
+  function disableLivePreview() {
+    if (!livePreviewActive) return;
+    livePreviewActive = false;
+    document.removeEventListener('selectionchange', onLiveSelectionChange);
+    if (selTimer) { clearTimeout(selTimer); selTimer = null; }
+    if (titleEl) titleEl.textContent = 'Markdown Preview';
+  }
+
+  box._enableLivePreview = enableLivePreview;
+  box._disableLivePreview = disableLivePreview;
 
   // Anchor the popup near the selection rect (viewport coords). Falls back to
   // top-right when no rect is available. Clamps so it never overflows.
