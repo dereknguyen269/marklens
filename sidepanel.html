@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <link rel="icon" type="image/png" href="icons/favicon.png">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="highlight.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="title">Markdown Live Preview</div>
+    <div class="view-toggle" role="tablist">
+      <button id="tab-split" class="tab active" data-view="split">Split</button>
+      <button id="tab-edit" class="tab" data-view="edit">Edit</button>
+      <button id="tab-preview" class="tab" data-view="preview">Preview</button>
+    </div>
+  </header>
+
+  <main id="workspace" class="view-split">
+    <section class="pane editor-pane">
+      <textarea id="editor" spellcheck="false" placeholder="# Write or paste Markdown here…
+
+Select text on a page → right-click → “Preview as Markdown”"></textarea>
+    </section>
+    <section class="pane preview-pane">
+      <article id="preview" class="markdown-body"></article>
+    </section>
+  </main>
+
+  <footer class="statusbar">
+    <span id="status">Live</span>
+    <button id="copy-btn" title="Copy rendered HTML">Copy HTML</button>
+  </footer>
+
+  <script src="marked.min.js"></script>
+  <script src="marked-footnote.umd.js"></script>
+  <script src="marked-deflist.umd.js"></script>
+  <script src="marked-emoji.umd.js"></script>
+  <script src="emoji-map.js"></script>
+  <script src="highlight.min.js"></script>
+  <script src="marked-highlight.umd.js"></script>
+  <script src="marked-extras.umd.js"></script>
+  <script src="sidepanel.js"></script>
+</body>
+</html>

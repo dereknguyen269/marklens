@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Markdown Live Preview",
+  "version": "1.0.2",
+  "description": "Select Markdown text on any page — see a live rendered preview floating on the page. Or open the side panel to write your own.",
+  "minimum_chrome_version": "116",
+  "permissions": ["sidePanel", "contextMenus", "storage", "scripting", "tabs", "activeTab"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Markdown Live Preview",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "web_accessible_resources": [
+    { "resources": ["highlight.css", "highlight-dark.css", "icons/favicon.png"], "matches": ["<all_urls>"] }
+  ]
+}
