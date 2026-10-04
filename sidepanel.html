@@ -8,13 +8,69 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="title">Markdown Live Preview</div>
-    <div class="view-toggle" role="tablist">
-      <button id="tab-split" class="tab active" data-view="split">Split</button>
-      <button id="tab-edit" class="tab" data-view="edit">Edit</button>
-      <button id="tab-preview" class="tab" data-view="preview">Preview</button>
+    <div class="title"><img src="icons/icon48.png" alt="" class="brand-logo">Markdown &amp; HTML Live Preview</div>
+    <div class="view-toggle" role="tablist" aria-label="Layout">
+      <button id="tab-split" class="tab active" role="tab" aria-selected="true" data-view="split" title="Split view (Alt+1)">Split</button>
+      <button id="tab-edit" class="tab" role="tab" aria-selected="false" data-view="edit" title="Editor only (Alt+2)">Edit</button>
+      <button id="tab-preview" class="tab" role="tab" aria-selected="false" data-view="preview" title="Preview only (Alt+3)">Preview</button>
     </div>
+    <div class="mode-toggle">
+      <button id="mode-md" class="mode-btn active" title="Editor content is Markdown">MD</button>
+      <button id="mode-html" class="mode-btn" title="Editor content is HTML — convert to Markdown">HTML</button>
+    </div>
+    <button id="settings-btn" class="icon-btn" title="Settings" aria-label="Settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+    </button>
   </header>
+
+  <div class="toolsbar">
+    <div class="tool-grp">
+      <label>Theme</label>
+      <select id="tool-theme" title="Preview theme">
+        <optgroup label="Solid">
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+          <option value="sepia">Sepia</option>
+          <option value="nord">Nord</option>
+          <option value="dracula">Dracula</option>
+          <option value="github">GitHub Dark</option>
+          <option value="solarized_light">Solarized Light</option>
+          <option value="solarized_dark">Solarized Dark</option>
+        </optgroup>
+        <optgroup label="Gradient">
+          <option value="aurora">Aurora</option>
+          <option value="sunset">Sunset</option>
+          <option value="ocean">Ocean</option>
+          <option value="midnight">Midnight</option>
+        </optgroup>
+      </select>
+    </div>
+    <div class="tool-divider"></div>
+    <div class="tool-grp">
+      <label>Size</label>
+      <select id="tool-fontsize" title="Font size">
+        <option value="12">12</option>
+        <option value="13">13</option>
+        <option value="14">14</option>
+        <option value="15">15</option>
+        <option value="16">16</option>
+        <option value="18">18</option>
+        <option value="20">20</option>
+      </select>
+    </div>
+    <div class="tool-divider"></div>
+    <div class="tool-grp">
+      <label>Font</label>
+      <select id="tool-fontfamily" title="Font family">
+        <option value='-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'>System</option>
+        <option value='Georgia, "Times New Roman", serif'>Serif</option>
+        <option value='"Helvetica Neue", Arial, sans-serif'>Arial</option>
+        <option value='"Courier New", Consolas, Menlo, monospace'>Mono</option>
+        <option value='"Comic Sans MS", cursive'>Comic</option>
+        <option value='Palatino, "Palatino Linotype", serif'>Palatino</option>
+      </select>
+    </div>
+  </div>
 
   <main id="workspace" class="view-split">
     <section class="pane editor-pane">
@@ -28,8 +84,14 @@ Select text on a page → right-click → “Preview as Markdown”"></textarea>
   </main>
 
   <footer class="statusbar">
-    <span id="status">Live</span>
-    <button id="copy-btn" title="Copy rendered HTML">Copy HTML</button>
+    <div class="status-left">
+      <span id="status" role="status">Live</span>
+      <span id="counts" title="Word and character count"></span>
+    </div>
+    <div class="status-actions">
+      <button id="clear-btn" title="Clear editor and preview">Clear</button>
+      <button id="copy-btn" title="Copy rendered HTML (Ctrl+Enter / Ctrl+S)">Copy</button>
+    </div>
   </footer>
 
   <script src="marked.min.js"></script>
@@ -40,6 +102,12 @@ Select text on a page → right-click → “Preview as Markdown”"></textarea>
   <script src="highlight.min.js"></script>
   <script src="marked-highlight.umd.js"></script>
   <script src="marked-extras.umd.js"></script>
+  <script src="turndown.min.js"></script>
+  <script src="turndown-plugin-gfm.js"></script>
+  <script src="dompurify.min.js"></script>
+  <script src="themes.js"></script>
+  <script src="setupMarked.js"></script>
+  <script src="storage.js"></script>
   <script src="sidepanel.js"></script>
 </body>
 </html>

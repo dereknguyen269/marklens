@@ -1,18 +1,16 @@
-// background.js — service worker for Markdown Live Preview
+// background.js — service worker for Markdown & HTML Live Preview
 
 const MENU_ID = 'preview-markdown-selection';
-const MENU_SIDEBAR_ID = 'preview-markdown-sidebar';
+const MENU_HTML_TO_MD = 'convert-html-to-md';
 
 chrome.runtime.onInstalled.addListener(function () {
   console.log('[MD] onInstalled fired');
 
+  // Disable side panel auto-open on action click — popup handles that now.
   if (chrome.sidePanel && chrome.sidePanel.setPanelBehavior) {
     chrome.sidePanel
-      .setPanelBehavior({ openPanelOnActionClick: true })
-      .then(function () { console.log('[MD] sidePanel open-on-click enabled'); })
+      .setPanelBehavior({ openPanelOnActionClick: false })
       .catch(function (err) { console.error('[MD] sidePanel behavior error:', err); });
-  } else {
-    console.warn('[MD] chrome.sidePanel unavailable in this Chrome version');
   }
 
   chrome.contextMenus.removeAll(function () {
@@ -21,79 +19,151 @@ chrome.runtime.onInstalled.addListener(function () {
       function () { if (chrome.runtime.lastError) console.error('[MD] menu error:', chrome.runtime.lastError.message); }
     );
     chrome.contextMenus.create(
-      { id: MENU_SIDEBAR_ID, title: 'Preview as Markdown (Sidebar)', contexts: ['selection'] },
-      function () { if (chrome.runtime.lastError) console.error('[MD] sidebar menu error:', chrome.runtime.lastError.message); }
+      { id: MENU_HTML_TO_MD, title: 'Convert HTML to Markdown', contexts: ['selection'] },
+      function () { if (chrome.runtime.lastError) console.error('[MD] html2md menu error:', chrome.runtime.lastError.message); }
     );
   });
 });
 
-chrome.contextMenus.onClicked.addListener(async function (info, tab) {
-  if (info.menuItemId !== MENU_ID && info.menuItemId !== MENU_SIDEBAR_ID) return;
-
-  var mode = info.menuItemId === MENU_SIDEBAR_ID ? 'sidebar' : 'popup';
-  const selected = (info.selectionText || '').trim();
-  if (!selected) return;
-
-  // Always stash for the side panel as a backup (text + anchor rect).
-  await chrome.storage.session.set({ pendingMarkdown: selected, pendingRect: null }).catch(function (e) {
+function stashForSidePanel(isHtmlToMd, text, html) {
+  if (isHtmlToMd) {
+    return chrome.storage.session.set({ pendingHtml: html || text }).catch(function (e) {
+      console.error('[MD] storage.set failed:', e);
+    });
+  }
+  return chrome.storage.session.set({ pendingMarkdown: text }).catch(function (e) {
     console.error('[MD] storage.set failed:', e);
   });
+}
 
-  // Primary: inject a floating preview directly into the active tab.
-  // Works on any http(s) page; falls back to side panel otherwise.
-  if (tab && tab.id != null) {
-    try {
-      // Inject renderer + all plugins + content.js in one call. Files run in
-      // array order, so globals are set before content.js executes.
-      await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        files: [
-          'marked.min.js',
-          'marked-footnote.umd.js',
-          'marked-deflist.umd.js',
-          'marked-emoji.umd.js',
-          'emoji-map.js',
-          'highlight.min.js',
-          'marked-highlight.umd.js',
-          'marked-extras.umd.js',
-          'content.js'
-        ]
-      });
-      // Grab the live selection from the page — getSelection().toString()
-      // preserves newlines, which info.selectionText can drop. Also capture
-      // the rect of the first selected range so the popup can anchor to it.
-      const [{ result: liveSel }] = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: function () {
-          var s = window.getSelection();
-          if (!s || !s.rangeCount) return { text: '', rect: null };
-          var text = s.toString();
-          var r = s.getRangeAt(0).getBoundingClientRect();
-          return {
-            text: text,
-            rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom }
-          };
+var INJECT_FILES = [
+  'marked.min.js',
+  'marked-footnote.umd.js',
+  'marked-deflist.umd.js',
+  'marked-emoji.umd.js',
+  'emoji-map.js',
+  'highlight.min.js',
+  'marked-highlight.umd.js',
+  'marked-extras.umd.js',
+  'turndown.min.js',
+  'turndown-plugin-gfm.js',
+  'setupMarked.js',
+  'themes.js',
+  'dompurify.min.js',
+  'storage.js',
+  'content.js'
+];
+
+// True once the full library + content stack is already injected into the page.
+function libsReady(tabId) {
+  return chrome.scripting.executeScript({
+    target: { tabId: tabId },
+    func: function () {
+      return !!(globalThis.marked && globalThis.hljs && globalThis.TurndownService &&
+                globalThis.markedFootnote && globalThis.DOMPurify &&
+                globalThis.MD_THEMES && globalThis.setupMarked && globalThis.mdStorage);
+    }
+  });
+}
+
+chrome.contextMenus.onClicked.addListener(function (info, tab) {
+  if (info.menuItemId !== MENU_ID && info.menuItemId !== MENU_HTML_TO_MD) return;
+
+  var isHtmlToMd = info.menuItemId === MENU_HTML_TO_MD;
+  var selected = (info.selectionText || '').trim();
+  if (!selected) return;
+
+  // Read mode from config (default: popup).
+  chrome.storage.local.get(['mdPreviewConfig'], function (res) {
+    var mode = (res && res.mdPreviewConfig && res.mdPreviewConfig.mode) || 'popup';
+
+    if (mode === 'sidebar') {
+      // Sidebar mode: open Chrome side panel synchronously (user gesture active).
+      if (tab && tab.windowId != null && chrome.sidePanel && chrome.sidePanel.open) {
+        chrome.sidePanel.open({ tabId: tab.id }).catch(function (err) {
+          console.error('[MD] sidePanel.open failed:', err.message);
+        });
+      }
+
+      stashForSidePanel(isHtmlToMd, selected, selected);
+      if (tab && tab.id != null) {
+        chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: function () {
+            var s = window.getSelection();
+            if (!s || !s.rangeCount) return { text: '', html: '' };
+            var text = s.toString();
+            var html = '';
+            try { var frag = s.getRangeAt(0).cloneContents(); var d = document.createElement('div'); d.appendChild(frag); html = d.innerHTML; } catch (e) {}
+            return { text: text, html: html };
+          }
+        }).then(function (results) {
+          var liveSel = results && results[0] && results[0].result;
+          if (liveSel && liveSel.text) stashForSidePanel(isHtmlToMd, liveSel.text, liveSel.html || liveSel.text);
+        }).catch(function (err) {
+          console.warn('[MD] executeScript failed:', err.message);
+        });
+      }
+    } else {
+      // Popup mode: inject floating preview into the page (only the libs on first use).
+      if (!tab || tab.id == null) return;
+
+      libsReady(tab.id).then(function (res) {
+        var ready = res && res[0] && res[0].result;
+        return chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ready ? ['content.js'] : INJECT_FILES
+        });
+      }).then(function () {
+        return chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: function () {
+            var s = window.getSelection();
+            if (!s || !s.rangeCount) return { text: '', html: '', rect: null };
+            var text = s.toString();
+            var r = s.getRangeAt(0);
+            var rect = r.getBoundingClientRect();
+            var html = '';
+            try { var frag = r.cloneContents(); var d = document.createElement('div'); d.appendChild(frag); html = d.innerHTML; } catch (e) {}
+            return { text: text, html: html, rect: { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom } };
+          }
+        });
+      }).then(function (results) {
+        var liveSel = results && results[0] && results[0].result;
+        var text = (liveSel && liveSel.text) || selected;
+        var html = (liveSel && liveSel.html) || '';
+        var rect = (liveSel && liveSel.rect) || null;
+
+        if (isHtmlToMd) {
+          chrome.tabs.sendMessage(tab.id, { action: 'convertHtmlToMarkdown', html: html || selected, rect: rect });
+        } else {
+          chrome.tabs.sendMessage(tab.id, { action: 'renderMarkdown', text: text, rect: rect });
+        }
+      }).catch(function (err) {
+        console.warn('[MD] inject failed (likely chrome:// or restricted page):', err.message);
+        // Fallback: stash the selection and open the side panel (or a tab).
+        stashForSidePanel(isHtmlToMd, selected, selected);
+        if (tab && tab.windowId != null && chrome.sidePanel && chrome.sidePanel.open) {
+          chrome.sidePanel.open({ tabId: tab.id }).catch(function () {
+            chrome.tabs.create({ url: chrome.runtime.getURL('sidepanel.html') });
+          });
+        } else {
+          chrome.tabs.create({ url: chrome.runtime.getURL('sidepanel.html') });
         }
       });
-      var text = (liveSel && typeof liveSel.text === 'string' ? liveSel.text : selected) || selected;
-      var rect = liveSel && liveSel.rect ? liveSel.rect : null;
-      // Pass the selected text + anchor rect to the injected preview.
-      await chrome.tabs.sendMessage(tab.id, { action: 'renderMarkdown', text: text, rect: rect, mode: mode });
-      console.log('[MD] injected floating preview');
-      return;
-    } catch (err) {
-      console.warn('[MD] inject failed (likely chrome:// or restricted page):', err.message);
     }
-  }
+  });
+});
 
-  // Fallback: side panel (or tab) for restricted pages.
-  if (tab && tab.windowId != null && chrome.sidePanel && chrome.sidePanel.open) {
-    try {
-      await chrome.sidePanel.open({ windowId: tab.windowId });
-      return;
-    } catch (err) {
-      console.warn('[MD] sidePanel.open failed, opening tab fallback:', err);
+// Handle "open in side panel" request from popup content.js.
+chrome.runtime.onMessage.addListener(function (msg, sender) {
+  if (msg && msg.action === 'openSidePanel') {
+    var tab = sender.tab;
+    if (tab && tab.windowId != null && chrome.sidePanel && chrome.sidePanel.open) {
+      if (msg.text) chrome.storage.session.set({ pendingMarkdown: msg.text });
+      chrome.sidePanel.open({ tabId: tab.id }).catch(function (err) {
+        console.error('[MD] sidePanel.open from popup failed:', err.message);
+      });
     }
   }
-  chrome.tabs.create({ url: chrome.runtime.getURL('sidepanel.html') });
 });

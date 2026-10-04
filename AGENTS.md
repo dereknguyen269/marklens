@@ -20,16 +20,20 @@ All source is plain JS/HTML/CSS loaded directly by the browser.
 - `marked-extras.umd.js` — hand-written inline extensions: heading IDs (`{#id}`), highlight (`==text==`→`<mark>`), subscript (`~text~`→`<sub>`), superscript (`^text^`→`<sup>`). Exposes `globalThis.markedExtras.markedExtras`.
 - `highlight.min.js` — vendored [highlight.js](https://highlightjs.org/) v11 (BSD). Exposes `globalThis.hljs`.
 - `highlight.css` / `highlight-dark.css` — vendored highlight.js themes (GitHub light/dark). Listed in `web_accessible_resources`.
-- `content.js` — injected floating preview. 8 popup themes via CSS custom properties. Theme/font/size/copy controls. Resize handle. Esc-to-close. Config persisted to `chrome.storage.local`.
+- `dompurify.min.js` — vendored [DOMPurify](https://github.com/cure53/DOMPurify) v3 (Apache 2.0 / MPL 2.0). Sanitizes all `marked.parse` output before `innerHTML` (in `content.js` and `sidepanel.js`) to prevent XSS from page selections.
+- `setupMarked.js` — configures `globalThis.marked` (GFM, breaks, all plugins) once. Exposes `globalThis.setupMarked()`. Loaded after the marked libs, before `content.js` / `sidepanel.js`.
+- `themes.js` — single source of truth for theme palettes. Exposes `globalThis.MD_THEMES` (12 popup `--md-*` themes) and `globalThis.MD_SIDEPANEL_THEMES` (12 side-panel/options `--bg/--surface/...` themes).
+- `storage.js` — shared `chrome.storage.local` bridge. Exposes `globalThis.mdStorage.load(defaults, cb)` / `mdStorage.save(config)` for `mdPreviewConfig`.
+- `content.js` — injected floating preview. 12 themes via CSS custom properties (defined in `themes.js`). Theme/font/size/copy controls, minimize/zoom traffic lights, resize handle, Esc-to-close. Config persisted to `chrome.storage.local`.
 - `sidepanel.html` / `sidepanel.js` — standalone editor/preview panel with split/edit/preview views. Loads all scripts then `sidepanel.js`.
 - `styles.css` — side panel styles (the floating popup uses inline styles in `content.js`).
 
 ## Gotchas
-- Injection order: `background.js` uses a single `executeScript` with `files: [...]` array — files run in array order, so `marked.min.js` and all plugins are loaded before `content.js`. Do not reorder.
+- Injection order: `background.js` uses a single `executeScript` with `files: [...]` array — files run in array order, so `marked.min.js` and all plugins are loaded before `content.js`. Do not reorder: `setupMarked.js`, `themes.js`, and `dompurify.min.js` must come before `content.js`. On subsequent right-clicks the library files are skipped (only `content.js` re-injected) — see `libsReady()`.
 - Plugin export styles differ: `markedFootnote` is a direct function (`marked.use(markedFootnote())`); all others are named exports on an object (`marked.use(lib.markedX())`).
 - `chrome.storage.session` (`pendingMarkdown`) is the bridge for the side-panel fallback. `chrome.storage.local` (`mdPreviewConfig`) stores popup config (theme, font, size, dimensions).
 - Manifest references `icons/icon16.png`, `icon48.png`, `icon128.png` — must exist or Chrome rejects load.
 - `highlight.css` and `highlight-dark.css` must be in `web_accessible_resources` or the injected popup can't load them via `<link>`.
 - MV3 CSP is `script-src 'self'` — no remote CDN scripts. Everything is vendored locally.
 - To verify rendering: `node -e "const m=require('./marked.min.js');m.setOptions({gfm:true,breaks:true});console.log(m.parse('# hi\n\n**x**'))"`.
-- When content.js is already injected (box exists), a second right-click re-registers the message listener instead of re-creating the box.
+- When content.js is already injected (box exists), a second right-click re-registers the message listener instead of re-creating the box, and now re-positions it to the new selection.

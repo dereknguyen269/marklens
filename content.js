@@ -3,24 +3,41 @@
   'use strict';
 
   const NS = 'md-live-preview';
+
+  function safeHtml(html) {
+    return (globalThis.DOMPurify && globalThis.DOMPurify.sanitize)
+      ? globalThis.DOMPurify.sanitize(html)
+      : html;
+  }
+
   if (document.getElementById(NS + '-box')) {
-    // Already open — re-register the message listener so a new selection
-    // re-renders into the existing box.
     var existingBox = document.getElementById(NS + '-box');
     var existingBody = existingBox.querySelector('#' + NS + '-body');
     if (chrome.runtime && chrome.runtime.onMessage) {
       chrome.runtime.onMessage.addListener(function (msg) {
         if (msg && msg.action === 'renderMarkdown') {
           if (msg.text && existingBody) {
-            try { existingBody.innerHTML = (globalThis.marked || {}).parse(msg.text); }
-            catch (e) { existingBody.innerHTML = '<pre style="color:#c00">' + e + '</pre>'; }
-          }
-          if (msg.mode) {
-            existingBox.classList.toggle(NS + '-sidebar', msg.mode === 'sidebar');
-            if (msg.mode === 'sidebar' && existingBox._enableLivePreview) existingBox._enableLivePreview();
-            if (msg.mode !== 'sidebar' && existingBox._disableLivePreview) existingBox._disableLivePreview();
+            try { existingBody.innerHTML = safeHtml((globalThis.marked || {}).parse(msg.text)); }
+            catch (e) { existingBody.innerHTML = '<pre style="color:#c00">' + safeHtml(String(e)) + '</pre>'; }
           }
           existingBox.style.display = 'flex';
+          positionBox(existingBox, msg.rect || null);
+        }
+        if (msg && msg.action === 'convertHtmlToMarkdown') {
+          if (msg.html && existingBody) {
+            var TS = globalThis.TurndownService;
+            if (TS) {
+              var ts = new TS({ headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-' });
+              if (globalThis.turndownPluginGfm) ts.use(globalThis.turndownPluginGfm.gfm);
+              var md = ts.turndown(msg.html).replace(/\n{3,}/g, '\n\n').trim();
+              existingBody.innerHTML = '<pre style="white-space:pre-wrap;word-wrap:break-word;margin:0;font-family:Consolas,Menlo,monospace;font-size:inherit;color:inherit;background:none;"></pre>';
+              existingBody.firstChild.textContent = md;
+            } else {
+              existingBody.innerHTML = '<pre style="color:#c00">TurndownService not loaded.</pre>';
+            }
+          }
+          existingBox.style.display = 'flex';
+          positionBox(existingBox, msg.rect || null);
         }
       });
     }
@@ -30,231 +47,19 @@
   var DEFAULTS = {
     width: 380, height: 360, fontSize: 14,
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    theme: 'light', mode: 'popup'
+    theme: 'light'
   };
   var config = {};
 
   function loadConfig(cb) {
-    try {
-      chrome.storage.local.get(['mdPreviewConfig'], function (res) {
-        config = Object.assign({}, DEFAULTS, res && res.mdPreviewConfig || {});
-        cb();
-      });
-    } catch (e) {
-      config = Object.assign({}, DEFAULTS);
-      cb();
-    }
+    globalThis.mdStorage.load(DEFAULTS, function (c) { config = c; cb(); });
   }
-  function saveConfig() {
-    try { chrome.storage.local.set({ mdPreviewConfig: config }); } catch (e) {}
-  }
+  function saveConfig() { globalThis.mdStorage.save(config); }
 
   var LIGHT_HL = chrome.runtime.getURL('highlight.css');
   var DARK_HL = chrome.runtime.getURL('highlight-dark.css');
 
-  // Each theme sets CSS custom properties on the popup root + picks a hljs CSS.
-  var THEMES = {
-    light: {
-      label: 'Light', hljs: 'light',
-      vars: {
-        '--md-bg': 'rgba(255,255,255,0.85)', '--md-text': '#1d1d1f', '--md-border': 'rgba(0,0,0,0.1)',
-        '--md-shadow': '0 0 0 .5px rgba(0,0,0,.1), 0 12px 40px rgba(0,0,0,0.18)',
-        '--md-bar-bg': 'rgba(245,245,247,0.7)', '--md-bar-text': '#1d1d1f',
-        '--md-bar-btn-bg': 'rgba(0,0,0,0.08)', '--md-bar-btn-hover': 'rgba(0,0,0,0.15)',
-        '--md-tools-bg': 'transparent', '--md-tools-border': 'rgba(0,0,0,0.08)',
-        '--md-label': 'rgba(0,0,0,0.45)',
-        '--md-select-bg': 'rgba(0,0,0,0.06)', '--md-select-text': '#1d1d1f', '--md-select-border': 'rgba(0,0,0,0.1)',
-        '--md-select-hover': '#007aff',
-        '--md-divider': 'rgba(0,0,0,0.1)',
-        '--md-copy-bg': 'rgba(0,0,0,0.06)', '--md-copy-text': '#007aff', '--md-copy-border': 'rgba(0,0,0,0.1)',
-        '--md-copy-hover-bg': '#007aff', '--md-copy-hover-text': '#fff',
-        '--md-link': '#007aff',
-        '--md-code-bg': '#f5f5f7', '--md-code-text': '#1d1d1f', '--md-pre-bg': '#f5f5f7',
-        '--md-quote-border': '#007aff', '--md-quote-color': 'rgba(0,0,0,0.5)',
-        '--md-hr': 'rgba(0,0,0,0.1)', '--md-h-border': 'rgba(0,0,0,0.1)',
-        '--md-th-bg': '#f5f5f7', '--md-td-border': 'rgba(0,0,0,0.1)',
-        '--md-del': 'rgba(0,0,0,0.4)',
-        '--md-footnote-color': 'rgba(0,0,0,0.5)', '--md-footnote-border': 'rgba(0,0,0,0.1)',
-        '--md-mark-bg': '#fff3b0',
-        '--md-resize': 'rgba(0,0,0,0.15)'
-      }
-    },
-    dark: {
-      label: 'Dark', hljs: 'dark',
-      vars: {
-        '--md-bg': '#1e1e2e', '--md-text': '#cdd6f4', '--md-border': '#313244',
-        '--md-shadow': '0 12px 40px rgba(0,0,0,0.5)',
-        '--md-bar-bg': '#181825', '--md-bar-text': '#cdd6f4',
-        '--md-bar-btn-bg': 'rgba(255,255,255,0.1)', '--md-bar-btn-hover': 'rgba(255,255,255,0.2)',
-        '--md-tools-bg': '#181825', '--md-tools-border': '#313244',
-        '--md-label': '#9399b2',
-        '--md-select-bg': '#313244', '--md-select-text': '#cdd6f4', '--md-select-border': '#45475a',
-        '--md-select-hover': '#89b4fa',
-        '--md-divider': '#313244',
-        '--md-copy-bg': '#313244', '--md-copy-text': '#89b4fa', '--md-copy-border': '#45475a',
-        '--md-copy-hover-bg': '#89b4fa', '--md-copy-hover-text': '#1e1e2e',
-        '--md-link': '#89b4fa',
-        '--md-code-bg': '#313244', '--md-code-text': '#cdd6f4', '--md-pre-bg': '#181825',
-        '--md-quote-border': '#89b4fa', '--md-quote-color': '#7f849c',
-        '--md-hr': '#313244', '--md-h-border': '#313244',
-        '--md-th-bg': '#313244', '--md-td-border': '#45475a',
-        '--md-del': '#7f849c',
-        '--md-footnote-color': '#7f849c', '--md-footnote-border': '#313244',
-        '--md-mark-bg': '#7287fd',
-        '--md-resize': '#45475a'
-      }
-    },
-    sepia: {
-      label: 'Sepia', hljs: 'light',
-      vars: {
-        '--md-bg': '#f4ecd8', '--md-text': '#5b4636', '--md-border': '#d4c5a0',
-        '--md-shadow': '0 12px 40px rgba(91,70,54,0.2)',
-        '--md-bar-bg': '#8b6f47', '--md-bar-text': '#f4ecd8',
-        '--md-bar-btn-bg': 'rgba(244,236,216,0.2)', '--md-bar-btn-hover': 'rgba(244,236,216,0.35)',
-        '--md-tools-bg': '#efe6cf', '--md-tools-border': '#d4c5a0',
-        '--md-label': '#8b6f47',
-        '--md-select-bg': '#f9f3e3', '--md-select-text': '#5b4636', '--md-select-border': '#d4c5a0',
-        '--md-select-hover': '#8b6f47',
-        '--md-divider': '#d4c5a0',
-        '--md-copy-bg': '#f9f3e3', '--md-copy-text': '#8b6f47', '--md-copy-border': '#d4c5a0',
-        '--md-copy-hover-bg': '#8b6f47', '--md-copy-hover-text': '#f4ecd8',
-        '--md-link': '#8b6f47',
-        '--md-code-bg': '#e8dcc0', '--md-code-text': '#5b4636', '--md-pre-bg': '#e8dcc0',
-        '--md-quote-border': '#8b6f47', '--md-quote-color': '#7a6450',
-        '--md-hr': '#d4c5a0', '--md-h-border': '#d4c5a0',
-        '--md-th-bg': '#e8dcc0', '--md-td-border': '#d4c5a0',
-        '--md-del': '#7a6450',
-        '--md-footnote-color': '#7a6450', '--md-footnote-border': '#d4c5a0',
-        '--md-mark-bg': '#f0d878',
-        '--md-resize': '#b8a578'
-      }
-    },
-    nord: {
-      label: 'Nord', hljs: 'dark',
-      vars: {
-        '--md-bg': '#2e3440', '--md-text': '#d8dee9', '--md-border': '#3b4252',
-        '--md-shadow': '0 12px 40px rgba(0,0,0,0.4)',
-        '--md-bar-bg': '#3b4252', '--md-bar-text': '#eceff4',
-        '--md-bar-btn-bg': 'rgba(236,239,244,0.1)', '--md-bar-btn-hover': 'rgba(236,239,244,0.2)',
-        '--md-tools-bg': '#3b4252', '--md-tools-border': '#434c5e',
-        '--md-label': '#81a1c1',
-        '--md-select-bg': '#434c5e', '--md-select-text': '#d8dee9', '--md-select-border': '#4c566a',
-        '--md-select-hover': '#88c0d0',
-        '--md-divider': '#434c5e',
-        '--md-copy-bg': '#434c5e', '--md-copy-text': '#88c0d0', '--md-copy-border': '#4c566a',
-        '--md-copy-hover-bg': '#88c0d0', '--md-copy-hover-text': '#2e3440',
-        '--md-link': '#88c0d0',
-        '--md-code-bg': '#434c5e', '--md-code-text': '#d8dee9', '--md-pre-bg': '#3b4252',
-        '--md-quote-border': '#88c0d0', '--md-quote-color': '#7b8a9e',
-        '--md-hr': '#434c5e', '--md-h-border': '#434c5e',
-        '--md-th-bg': '#434c5e', '--md-td-border': '#4c566a',
-        '--md-del': '#7b8a9e',
-        '--md-footnote-color': '#7b8a9e', '--md-footnote-border': '#434c5e',
-        '--md-mark-bg': '#5e81ac',
-        '--md-resize': '#4c566a'
-      }
-    },
-    dracula: {
-      label: 'Dracula', hljs: 'dark',
-      vars: {
-        '--md-bg': '#282a36', '--md-text': '#f8f8f2', '--md-border': '#44475a',
-        '--md-shadow': '0 12px 40px rgba(0,0,0,0.5)',
-        '--md-bar-bg': '#21222c', '--md-bar-text': '#f8f8f2',
-        '--md-bar-btn-bg': 'rgba(248,248,242,0.1)', '--md-bar-btn-hover': 'rgba(248,248,242,0.2)',
-        '--md-tools-bg': '#21222c', '--md-tools-border': '#44475a',
-        '--md-label': '#bd93f9',
-        '--md-select-bg': '#44475a', '--md-select-text': '#f8f8f2', '--md-select-border': '#6272a4',
-        '--md-select-hover': '#bd93f9',
-        '--md-divider': '#44475a',
-        '--md-copy-bg': '#44475a', '--md-copy-text': '#bd93f9', '--md-copy-border': '#6272a4',
-        '--md-copy-hover-bg': '#bd93f9', '--md-copy-hover-text': '#282a36',
-        '--md-link': '#ff79c6',
-        '--md-code-bg': '#44475a', '--md-code-text': '#f8f8f2', '--md-pre-bg': '#21222c',
-        '--md-quote-border': '#bd93f9', '--md-quote-color': '#6272a4',
-        '--md-hr': '#44475a', '--md-h-border': '#44475a',
-        '--md-th-bg': '#44475a', '--md-td-border': '#6272a4',
-        '--md-del': '#6272a4',
-        '--md-footnote-color': '#6272a4', '--md-footnote-border': '#44475a',
-        '--md-mark-bg': '#50fa7b',
-        '--md-resize': '#6272a4'
-      }
-    },
-    github: {
-      label: 'GitHub Dark', hljs: 'dark',
-      vars: {
-        '--md-bg': '#0d1117', '--md-text': '#c9d1d9', '--md-border': '#30363d',
-        '--md-shadow': '0 12px 40px rgba(0,0,0,0.5)',
-        '--md-bar-bg': '#161b22', '--md-bar-text': '#c9d1d9',
-        '--md-bar-btn-bg': 'rgba(201,209,217,0.1)', '--md-bar-btn-hover': 'rgba(201,209,217,0.2)',
-        '--md-tools-bg': '#161b22', '--md-tools-border': '#30363d',
-        '--md-label': '#8b949e',
-        '--md-select-bg': '#21262d', '--md-select-text': '#c9d1d9', '--md-select-border': '#30363d',
-        '--md-select-hover': '#58a6ff',
-        '--md-divider': '#30363d',
-        '--md-copy-bg': '#21262d', '--md-copy-text': '#58a6ff', '--md-copy-border': '#30363d',
-        '--md-copy-hover-bg': '#58a6ff', '--md-copy-hover-text': '#0d1117',
-        '--md-link': '#58a6ff',
-        '--md-code-bg': '#161b22', '--md-code-text': '#c9d1d9', '--md-pre-bg': '#161b22',
-        '--md-quote-border': '#58a6ff', '--md-quote-color': '#8b949e',
-        '--md-hr': '#30363d', '--md-h-border': '#30363d',
-        '--md-th-bg': '#161b22', '--md-td-border': '#30363d',
-        '--md-del': '#8b949e',
-        '--md-footnote-color': '#8b949e', '--md-footnote-border': '#30363d',
-        '--md-mark-bg': '#bb8009',
-        '--md-resize': '#484f58'
-      }
-    },
-    solarized_light: {
-      label: 'Solarized Light', hljs: 'light',
-      vars: {
-        '--md-bg': '#fdf6e3', '--md-text': '#657b83', '--md-border': '#eee8d5',
-        '--md-shadow': '0 12px 40px rgba(101,123,131,0.15)',
-        '--md-bar-bg': '#b58900', '--md-bar-text': '#fdf6e3',
-        '--md-bar-btn-bg': 'rgba(253,246,227,0.2)', '--md-bar-btn-hover': 'rgba(253,246,227,0.35)',
-        '--md-tools-bg': '#eee8d5', '--md-tools-border': '#e0d8c5',
-        '--md-label': '#93a1a1',
-        '--md-select-bg': '#f5efe0', '--md-select-text': '#657b83', '--md-select-border': '#d0c8b5',
-        '--md-select-hover': '#b58900',
-        '--md-divider': '#e0d8c5',
-        '--md-copy-bg': '#f5efe0', '--md-copy-text': '#b58900', '--md-copy-border': '#d0c8b5',
-        '--md-copy-hover-bg': '#b58900', '--md-copy-hover-text': '#fdf6e3',
-        '--md-link': '#b58900',
-        '--md-code-bg': '#eee8d5', '--md-code-text': '#657b83', '--md-pre-bg': '#eee8d5',
-        '--md-quote-border': '#b58900', '--md-quote-color': '#93a1a1',
-        '--md-hr': '#e0d8c5', '--md-h-border': '#e0d8c5',
-        '--md-th-bg': '#eee8d5', '--md-td-border': '#d0c8b5',
-        '--md-del': '#93a1a1',
-        '--md-footnote-color': '#93a1a1', '--md-footnote-border': '#e0d8c5',
-        '--md-mark-bg': '#ffe168',
-        '--md-resize': '#c0b888'
-      }
-    },
-    solarized_dark: {
-      label: 'Solarized Dark', hljs: 'dark',
-      vars: {
-        '--md-bg': '#002b36', '--md-text': '#93a1a1', '--md-border': '#073642',
-        '--md-shadow': '0 12px 40px rgba(0,0,0,0.5)',
-        '--md-bar-bg': '#073642', '--md-bar-text': '#93a1a1',
-        '--md-bar-btn-bg': 'rgba(147,161,161,0.1)', '--md-bar-btn-hover': 'rgba(147,161,161,0.2)',
-        '--md-tools-bg': '#073642', '--md-tools-border': '#0d3b47',
-        '--md-label': '#2aa198',
-        '--md-select-bg': '#073642', '--md-select-text': '#93a1a1', '--md-select-border': '#1a4b56',
-        '--md-select-hover': '#2aa198',
-        '--md-divider': '#0d3b47',
-        '--md-copy-bg': '#073642', '--md-copy-text': '#2aa198', '--md-copy-border': '#1a4b56',
-        '--md-copy-hover-bg': '#2aa198', '--md-copy-hover-text': '#002b36',
-        '--md-link': '#2aa198',
-        '--md-code-bg': '#073642', '--md-code-text': '#93a1a1', '--md-pre-bg': '#073642',
-        '--md-quote-border': '#2aa198', '--md-quote-color': '#657b83',
-        '--md-hr': '#0d3b47', '--md-h-border': '#0d3b47',
-        '--md-th-bg': '#073642', '--md-td-border': '#1a4b56',
-        '--md-del': '#657b83',
-        '--md-footnote-color': '#657b83', '--md-footnote-border': '#0d3b47',
-        '--md-mark-bg': '#268bd2',
-        '--md-resize': '#1a4b56'
-      }
-    }
-  };
+  var THEMES = globalThis.MD_THEMES;
 
   var SELECT_CHEVRON = "%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath d='M2 4l3 3 3-3' fill='none' stroke='%23888' stroke-width='1.5'/%3E%3C/svg%3E";
 
@@ -263,6 +68,14 @@
   box.innerHTML = `
     <style>
       @keyframes ${NS}-in { from { opacity:0; transform:scale(.96); } to { opacity:1; transform:scale(1); } }
+      @media (prefers-reduced-motion: reduce) {
+        #${NS}-box { animation: none !important; }
+        #${NS}-box *, #${NS}-box *::before, #${NS}-box *::after { transition-duration: .01ms !important; }
+      }
+      #${NS}-box :focus-visible {
+        outline: 2px solid var(--md-select-hover, #007aff) !important;
+        outline-offset: 1px !important;
+      }
       #${NS}-box {
         position: fixed !important;
         z-index: 2147483647 !important;
@@ -278,29 +91,6 @@
         -webkit-backdrop-filter: saturate(180%) blur(20px);
         backdrop-filter: saturate(180%) blur(20px);
       }
-      #${NS}-box.${NS}-sidebar {
-        top: 0 !important; right: 0 !important; bottom: 0 !important;
-        left: auto !important;
-        width: var(--md-sidebar-w, 380px) !important;
-        height: 100vh !important; max-height: 100vh !important;
-        border-radius: 0 !important;
-        border-left: 1px solid var(--md-border, rgba(0,0,0,.1)) !important;
-        border-top: none; border-right: none; border-bottom: none;
-        box-shadow: -8px 0 24px rgba(0,0,0,0.12) !important;
-        animation: ${NS}-slide-in .2s cubic-bezier(.16,1,.3,1);
-      }
-      @keyframes ${NS}-slide-in { from { transform: translateX(100%); } to { transform: translateX(0); } }
-      #${NS}-box.${NS}-sidebar #${NS}-resize {
-        right: auto !important; left: 0 !important; top: 0 !important; bottom: 0 !important;
-        width: 6px !important; height: 100% !important; cursor: ew-resize !important;
-        background: transparent !important;
-      }
-      #${NS}-box.${NS}-sidebar #${NS}-resize:hover {
-        background: var(--md-select-hover, rgba(0,122,255,.2)) !important;
-      }
-      #${NS}-box.${NS}-sidebar #${NS}-bar {
-        cursor: default !important;
-      }
       #${NS}-header {
         flex-shrink: 0;
         background: var(--md-bar-bg, #4f46e5) !important;
@@ -314,7 +104,6 @@
         color: inherit !important;
         font-size: 13px !important; font-weight: 600 !important;
         cursor: move !important; user-select: none !important;
-        -webkit-app-region: drag;
       }
       #${NS}-traffic { display:flex; align-items:center; gap:7px; }
       #${NS}-traffic span {
@@ -325,6 +114,8 @@
       #${NS}-traffic .${NS}-tl-close { background: #ff5f57; }
       #${NS}-traffic .${NS}-tl-min { background: #febc2e; }
       #${NS}-traffic .${NS}-tl-max { background: #28c840; }
+      #${NS}-box.${NS}-min #${NS}-body, #${NS}-box.${NS}-min #${NS}-tools { display: none !important; }
+      #${NS}-box.${NS}-max { width: min(90vw, 880px) !important; height: min(90vh, 760px) !important; }
       #${NS}-title {
         font-size: 13px; font-weight: 600; opacity: .85;
         flex: 1; text-align: center;
@@ -339,6 +130,7 @@
         opacity: .7; transition: opacity .15s, background .15s;
       }
       #${NS}-bar-btns button:hover { background: var(--md-bar-btn-bg, rgba(255,255,255,0.15)) !important; opacity: 1; }
+      #${NS}-bar-btns button svg { width: 15px !important; height: 15px !important; display: block !important; }
       #${NS}-tools {
         display: flex !important; align-items: center !important; flex-wrap: wrap !important;
         gap: 6px 8px !important;
@@ -386,7 +178,31 @@
       #${NS}-body {
         padding: 14px 18px !important; overflow: auto !important;
         line-height: 1.65 !important; flex: 1 1 auto !important; min-height: 0 !important;
+        scrollbar-width: thin !important;
+        scrollbar-color: var(--md-quote-color, #656d76) transparent !important;
       }
+      #${NS}-body::-webkit-scrollbar { width: 8px !important; height: 8px !important; }
+      #${NS}-body::-webkit-scrollbar-track { background: transparent !important; }
+      #${NS}-body::-webkit-scrollbar-corner { background: transparent !important; }
+      #${NS}-body::-webkit-scrollbar-thumb {
+        background: color-mix(in srgb, var(--md-quote-color, #656d76) 55%, transparent) !important;
+        border-radius: 999px !important;
+        border: 2px solid transparent !important;
+        background-clip: padding-box !important;
+        min-height: 24px !important;
+      }
+      #${NS}-body::-webkit-scrollbar-thumb:hover {
+        background: color-mix(in srgb, var(--md-quote-color, #656d76) 85%, transparent) !important;
+        background-clip: padding-box !important;
+        border: 2px solid transparent !important;
+      }
+      #${NS}-body::-webkit-scrollbar-thumb:active {
+        background: var(--md-quote-color, #656d76) !important;
+        background-clip: padding-box !important;
+        border: 2px solid transparent !important;
+      }
+      #${NS}-body pre { scrollbar-width: thin !important; }
+      #${NS}-body pre::-webkit-scrollbar { height: 6px !important; width: 6px !important; }
       #${NS}-body h1,#${NS}-body h2,#${NS}-body h3,#${NS}-body h4,#${NS}-body h5,#${NS}-body h6{
         margin:0.8em 0 0.4em; line-height:1.3; font-weight:600;
       }
@@ -431,28 +247,35 @@
     <div id="${NS}-header">
       <div id="${NS}-bar">
         <div id="${NS}-traffic">
-          <span class="${NS}-tl-close" title="Close"></span>
-          <span class="${NS}-tl-min" title="Minimize"></span>
-          <span class="${NS}-tl-max" title="Zoom"></span>
+          <span class="${NS}-tl-close" role="button" tabindex="0" title="Close (Esc)" aria-label="Close preview"></span>
+          <span class="${NS}-tl-min" role="button" tabindex="0" title="Minimize" aria-label="Minimize preview"></span>
+          <span class="${NS}-tl-max" role="button" tabindex="0" title="Zoom" aria-label="Zoom preview"></span>
         </div>
         <span id="${NS}-title">Markdown Preview</span>
         <div id="${NS}-bar-btns">
-          <button id="${NS}-mode" title="Toggle sidebar / popup">▮</button>
-          <button id="${NS}-close" title="Close (Esc)">×</button>
+          <button id="${NS}-sidepanel" title="Open in side panel" aria-label="Open in side panel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></svg></button>
         </div>
       </div>
       <div id="${NS}-tools">
         <div class="${NS}-grp">
           <label>Theme</label>
           <select id="${NS}-theme" title="Popup theme">
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-            <option value="sepia">Sepia</option>
-            <option value="nord">Nord</option>
-            <option value="dracula">Dracula</option>
-            <option value="github">GitHub Dark</option>
-            <option value="solarized_light">Solarized Light</option>
-            <option value="solarized_dark">Solarized Dark</option>
+            <optgroup label="Solid">
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+              <option value="sepia">Sepia</option>
+              <option value="nord">Nord</option>
+              <option value="dracula">Dracula</option>
+              <option value="github">GitHub Dark</option>
+              <option value="solarized_light">Solarized Light</option>
+              <option value="solarized_dark">Solarized Dark</option>
+            </optgroup>
+            <optgroup label="Gradient">
+              <option value="aurora">Aurora</option>
+              <option value="sunset">Sunset</option>
+              <option value="ocean">Ocean</option>
+              <option value="midnight">Midnight</option>
+            </optgroup>
           </select>
         </div>
         <div class="${NS}-divider"></div>
@@ -478,25 +301,28 @@
           </select>
         </div>
         <span class="${NS}-spacer"></span>
-        <button id="${NS}-copy" title="Copy rendered HTML">Copy HTML</button>
+        <button id="${NS}-copy" title="Copy rendered HTML (Ctrl+Enter)">Copy HTML</button>
       </div>
     </div>
     <div id="${NS}-body"></div>
     <div id="${NS}-resize"></div>
   `;
+  box.style.width = DEFAULTS.width + 'px';
+  box.style.height = DEFAULTS.height + 'px';
   document.body.appendChild(box);
 
   const body = box.querySelector('#' + NS + '-body');
-  const closeBtn = box.querySelector('#' + NS + '-close');
   const themeSel = box.querySelector('#' + NS + '-theme');
   const copyBtn = box.querySelector('#' + NS + '-copy');
   const fontSizeSel = box.querySelector('#' + NS + '-fontsize');
   const fontFamilySel = box.querySelector('#' + NS + '-fontfamily');
   const resizeHandle = box.querySelector('#' + NS + '-resize');
   const hlLink = box.querySelector('#' + NS + '-hl');
-  const modeBtn = box.querySelector('#' + NS + '-mode');
+  const sidepanelBtn = box.querySelector('#' + NS + '-sidepanel');
+  const titleEl = box.querySelector('#' + NS + '-title');
 
-  // Apply a named theme: set CSS vars on the box + swap highlight.js CSS.
+  if (globalThis.setupMarked) globalThis.setupMarked();
+
   function applyTheme(name) {
     var t = THEMES[name] || THEMES.light;
     var vars = t.vars;
@@ -509,58 +335,14 @@
     if (themeSel) themeSel.value = name;
   }
 
-  // Apply display mode: popup (floating) or sidebar (docked right).
-  function applyMode(mode) {
-    var isSidebar = mode === 'sidebar';
-    box.classList.toggle(NS + '-sidebar', isSidebar);
-    if (modeBtn) {
-      modeBtn.textContent = isSidebar ? '▣' : '▮';
-      modeBtn.title = isSidebar ? 'Switch to popup' : 'Switch to sidebar';
-    }
-    if (isSidebar) {
-      box.style.setProperty('--md-sidebar-w', config.width + 'px');
-      box.style.width = '';
-      box.style.height = '';
-      box.style.left = '';
-      box.style.top = '';
-    } else {
-      box.style.width = config.width + 'px';
-      box.style.height = config.height + 'px';
-    }
-    if (isSidebar) enableLivePreview(); else disableLivePreview();
-  }
-
   function applyConfig() {
     body.style.fontSize = config.fontSize + 'px';
     body.style.fontFamily = config.fontFamily;
     if (fontSizeSel) fontSizeSel.value = String(config.fontSize);
     if (fontFamilySel) fontFamilySel.value = config.fontFamily;
     applyTheme(config.theme || 'light');
-    applyMode(config.mode || 'popup');
-  }
-
-  // marked + plugins are injected before this file, so the globals should
-  // already be set. GFM + breaks so single newlines render as <br>.
-  if (globalThis.marked && typeof globalThis.marked.setOptions === 'function') {
-    globalThis.marked.setOptions({ gfm: true, breaks: true });
-    if (globalThis.markedFootnote) globalThis.marked.use(globalThis.markedFootnote());
-    if (globalThis.markedDeflist) globalThis.marked.use(globalThis.markedDeflist.markedDeflist());
-    if (globalThis.markedExtras) globalThis.marked.use(globalThis.markedExtras.markedExtras());
-    if (globalThis.markedEmoji && globalThis.EMOJI_SHORTCODES) {
-      var me = globalThis.markedEmoji.markedEmoji || globalThis.markedEmoji;
-      globalThis.marked.use(me({ emojis: globalThis.EMOJI_SHORTCODES, renderer: function (t) { return t.emoji; } }));
-    }
-    if (globalThis.hljs && globalThis.markedHighlight) {
-      var mh = globalThis.markedHighlight.markedHighlight || globalThis.markedHighlight;
-      globalThis.marked.use(mh({
-        langPrefix: 'hljs language-',
-        highlight: function (code, lang) {
-          var L = globalThis.hljs;
-          if (lang && L.getLanguage(lang)) { try { return L.highlight(code, { language: lang }).value; } catch (e) {} }
-          return L.highlightAuto(code).value;
-        }
-      }));
-    }
+    box.style.width = (config.width || DEFAULTS.width) + 'px';
+    box.style.height = (config.height || DEFAULTS.height) + 'px';
   }
 
   function render(text) {
@@ -570,9 +352,11 @@
     var md = globalThis.marked;
     if (md && typeof md.parse === 'function') {
       try {
-        body.innerHTML = md.parse(text || '');
+        body.innerHTML = safeHtml(md.parse(text || ''));
+        if (copyBtn) { copyBtn.textContent = 'Copy HTML'; copyBtn.title = 'Copy rendered HTML'; }
+        if (titleEl) titleEl.textContent = 'Markdown Preview';
       } catch (e) {
-        body.innerHTML = '<pre style="color:#c00;white-space:pre-wrap">' + String(e && e.stack ? e.stack : e) + '</pre>';
+        body.innerHTML = '<pre style="color:#c00;white-space:pre-wrap">' + safeHtml(String(e && e.stack ? e.stack : e)) + '</pre>';
         console.error('[MD] page render error:', e);
       }
       return;
@@ -585,53 +369,92 @@
     }
   }
 
-  function closeBox() { disableLivePreview(); box.remove(); }
-  closeBtn.addEventListener('click', closeBox);
+  function htmlToMarkdown(html) {
+    var TS = globalThis.TurndownService;
+    if (!TS) return 'ERROR: TurndownService not loaded.';
+    var ts = new TS({ headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-' });
+    if (globalThis.turndownPluginGfm) ts.use(globalThis.turndownPluginGfm.gfm);
+    var md = ts.turndown(html || '');
+    return md.replace(/\n{3,}/g, '\n\n').trim();
+  }
 
-  // Mode toggle: popup <-> sidebar.
-  modeBtn.addEventListener('click', function () {
-    config.mode = config.mode === 'sidebar' ? 'popup' : 'sidebar';
-    applyMode(config.mode);
-    saveConfig();
-  });
+  function renderMarkdownSource(mdText) {
+    body.innerHTML = '<pre id="' + NS + '-source" style="white-space:pre-wrap;word-wrap:break-word;margin:0;font-family:Consolas,Menlo,monospace;font-size:inherit;padding:inherit;color:inherit;background:none;"></pre>';
+    var pre = body.querySelector('#' + NS + '-source');
+    pre.textContent = mdText;
+    if (titleEl) titleEl.textContent = 'Markdown Source';
+    if (copyBtn) { copyBtn.textContent = 'Copy MD'; copyBtn.title = 'Copy Markdown source'; }
+  }
 
-  // Traffic-light buttons
+  function closeBox() { box.remove(); }
+
+  // Traffic-light close
   var tlClose = box.querySelector('.' + NS + '-tl-close');
   if (tlClose) tlClose.addEventListener('click', closeBox);
 
-  // Theme selector — apply + persist.
+  // Traffic-light minimize / zoom
+  var tlMin = box.querySelector('.' + NS + '-tl-min');
+  var tlMax = box.querySelector('.' + NS + '-tl-max');
+  if (tlMin) tlMin.addEventListener('click', function () { box.classList.toggle(NS + '-min'); });
+  if (tlMax) tlMax.addEventListener('click', function () { box.classList.toggle(NS + '-max'); });
+
+  // Keyboard access for the traffic-light controls (Enter/Space activates).
+  Array.prototype.forEach.call(box.querySelectorAll('#' + NS + '-traffic span'), function (el) {
+    el.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); }
+    });
+  });
+
+  // Open in Chrome side panel
+  sidepanelBtn.addEventListener('click', function () {
+    var text = '';
+    var pre = body.querySelector('pre#' + NS + '-source');
+    if (pre) { text = pre.textContent; }
+    else { text = body.innerHTML; }
+    try {
+      chrome.runtime.sendMessage({ action: 'openSidePanel', text: text });
+      closeBox();
+    } catch (e) { console.error('[MD] sendMessage failed:', e); }
+  });
+
   themeSel.addEventListener('change', function () {
     config.theme = this.value;
     applyTheme(config.theme);
     saveConfig();
   });
 
-  // Copy rendered HTML to clipboard.
   copyBtn.addEventListener('click', function () {
-    var html = body.innerHTML;
+    var pre = body.querySelector('pre#' + NS + '-source');
+    var copyText = pre ? pre.textContent : body.innerHTML;
     var done = function () {
       var old = copyBtn.textContent;
       copyBtn.textContent = 'Copied!';
       setTimeout(function () { copyBtn.textContent = old; }, 1200);
     };
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(html).then(done, done);
+      navigator.clipboard.writeText(copyText).then(done, done);
     } else {
       var ta = document.createElement('textarea');
-      ta.value = html; document.body.appendChild(ta); ta.select();
+      ta.value = copyText; document.body.appendChild(ta); ta.select();
       try { document.execCommand('copy'); done(); } catch (e) {}
       ta.remove();
     }
   });
 
-  // Esc to close.
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && document.getElementById(NS + '-box')) {
       closeBox();
     }
   });
 
-  // Font size / family controls — apply immediately and persist.
+  // Ctrl/Cmd+Enter copies when focus is inside the popup.
+  box.addEventListener('keydown', function (e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      copyBtn.click();
+    }
+  });
+
   fontSizeSel.addEventListener('change', function () {
     config.fontSize = parseInt(this.value, 10) || DEFAULTS.fontSize;
     body.style.fontSize = config.fontSize + 'px';
@@ -648,7 +471,6 @@
   let dragging = false, offX = 0, offY = 0;
   bar.addEventListener('mousedown', function (e) {
     if (e.target.closest('#' + NS + '-bar-btns') || e.target.closest('#' + NS + '-traffic')) return;
-    if (box.classList.contains(NS + '-sidebar')) return;
     dragging = true;
     const rect = box.getBoundingClientRect();
     offX = e.clientX - rect.left;
@@ -664,8 +486,7 @@
   });
   document.addEventListener('mouseup', function () { dragging = false; });
 
-  // Drag-to-resize via the handle. In popup mode: bottom-right corner
-  // (width + height). In sidebar mode: left edge (width only).
+  // Drag-to-resize (bottom-right corner)
   let resizing = false, rsx = 0, rsy = 0, rsw = 0, rsh = 0;
   resizeHandle.addEventListener('mousedown', function (e) {
     e.preventDefault();
@@ -676,71 +497,23 @@
   });
   document.addEventListener('mousemove', function (e) {
     if (!resizing) return;
-    if (box.classList.contains(NS + '-sidebar')) {
-      // Sidebar: drag left edge to resize width.
-      var nw = Math.max(280, rsw - (e.clientX - rsx));
-      box.style.setProperty('--md-sidebar-w', nw + 'px');
-    } else {
-      // Popup: drag bottom-right corner.
-      var nw = Math.max(280, rsw + (e.clientX - rsx));
-      var nh = Math.max(160, rsh + (e.clientY - rsy));
-      box.style.width = nw + 'px';
-      box.style.height = nh + 'px';
-    }
+    var nw = Math.max(280, rsw + (e.clientX - rsx));
+    var nh = Math.max(160, rsh + (e.clientY - rsy));
+    box.style.width = nw + 'px';
+    box.style.height = nh + 'px';
   });
   document.addEventListener('mouseup', function () {
     if (resizing) {
       resizing = false;
       config.width = box.offsetWidth;
-      if (!box.classList.contains(NS + '-sidebar')) {
-        config.height = box.offsetHeight;
-      }
+      config.height = box.offsetHeight;
       saveConfig();
     }
   });
 
-  // ── Live selection preview (sidebar only) ──
-  var livePreviewActive = false;
-  var selTimer = null;
-  var titleEl = box.querySelector('#' + NS + '-title');
-
-  function onLiveSelectionChange() {
-    if (!livePreviewActive) return;
-    if (selTimer) clearTimeout(selTimer);
-    selTimer = setTimeout(function () {
-      var sel = window.getSelection();
-      if (!sel || !sel.rangeCount) return;
-      var text = sel.toString();
-      if (!text || text.trim().length < 1) return;
-      render(text);
-    }, 200);
-  }
-
-  function enableLivePreview() {
-    if (livePreviewActive) return;
-    livePreviewActive = true;
-    document.addEventListener('selectionchange', onLiveSelectionChange);
-    if (titleEl) titleEl.textContent = 'Live Preview: select text on page';
-  }
-
-  function disableLivePreview() {
-    if (!livePreviewActive) return;
-    livePreviewActive = false;
-    document.removeEventListener('selectionchange', onLiveSelectionChange);
-    if (selTimer) { clearTimeout(selTimer); selTimer = null; }
-    if (titleEl) titleEl.textContent = 'Markdown Preview';
-  }
-
-  box._enableLivePreview = enableLivePreview;
-  box._disableLivePreview = disableLivePreview;
-
-  // Anchor the popup near the selection rect (viewport coords). Falls back to
-  // top-right when no rect is available. Clamps so it never overflows.
-  // In sidebar mode, the box is CSS-pinned to the right edge — skip positioning.
-  function positionBox(rect) {
-    if (box.classList.contains(NS + '-sidebar')) return;
-    box.style.right = 'auto';
-    var w = config.width || 380, h = config.height || 360;
+  function positionBox(boxEl, rect) {
+    boxEl.style.right = 'auto';
+    var w = boxEl.offsetWidth || 380, h = boxEl.offsetHeight || 360;
     var vw = window.innerWidth, vh = window.innerHeight;
     var left, top;
     if (rect && typeof rect.left === 'number') {
@@ -756,19 +529,18 @@
     left = Math.max(left, 8);
     top = Math.min(top, vh - 40);
     top = Math.max(top, 8);
-    box.style.left = left + 'px';
-    box.style.top = top + 'px';
+    boxEl.style.left = left + 'px';
+    boxEl.style.top = top + 'px';
   }
 
-  render('');
-
-  // Self-fetch the pending selection written by background.js (no message race).
   function loadPending() {
     try {
-      chrome.storage.session.get(['pendingMarkdown'], function (res) {
-        const text = res && res.pendingMarkdown;
-        if (text) {
-          render(text);
+      chrome.storage.session.get(['pendingMarkdown', 'pendingHtml'], function (res) {
+        if (res && res.pendingHtml) {
+          renderMarkdownSource(htmlToMarkdown(res.pendingHtml));
+          chrome.storage.session.remove('pendingHtml');
+        } else if (res && res.pendingMarkdown) {
+          render(res.pendingMarkdown);
           chrome.storage.session.remove('pendingMarkdown');
         }
       });
@@ -777,25 +549,27 @@
     }
   }
 
-  // Also accept direct messages (belt-and-suspenders).
   if (chrome.runtime && chrome.runtime.onMessage) {
     chrome.runtime.onMessage.addListener(function (msg) {
       if (msg && msg.action === 'renderMarkdown') {
         if (msg.text) render(msg.text);
-        if (msg.mode) {
-          config.mode = msg.mode;
-          applyMode(config.mode);
-          saveConfig();
+        positionBox(box, msg.rect || null);
+        box.style.display = 'flex';
+      }
+      if (msg && msg.action === 'convertHtmlToMarkdown') {
+        if (msg.html) {
+          var md = htmlToMarkdown(msg.html);
+          renderMarkdownSource(md);
         }
-        positionBox(msg.rect || null);
+        positionBox(box, msg.rect || null);
         box.style.display = 'flex';
       }
     });
   }
 
-  // Boot: load saved config, apply, then fetch any pending selection.
   loadConfig(function () {
     applyConfig();
+    render('');
     loadPending();
   });
 })();

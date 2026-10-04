@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" type="image/png" href="icons/favicon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="options-body">
+  <header class="topbar">
+    <div class="title"><img src="icons/icon48.png" alt="" class="brand-logo">Markdown &amp; HTML Live Preview</div>
+    <div class="view-toggle" role="tablist" aria-label="Pages">
+      <button class="tab opt-tab active" role="tab" aria-selected="true" data-tab="home">Home</button>
+      <button class="tab opt-tab" role="tab" aria-selected="false" data-tab="settings">Settings</button>
+      <button class="tab opt-tab" role="tab" aria-selected="false" data-tab="about">About</button>
+    </div>
+    <button id="opt-open-editor" class="opt-open-btn" title="Open the editor in this tab">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+      Open Editor
+    </button>
+  </header>
+
+  <main class="options-content">
+   <div class="options-inner">
+     <section id="opt-home" class="opt-section active" role="tabpanel">
+      <h2>Markdown &amp; HTML Live Preview</h2>
+      <p class="opt-subtitle">Select text on any page → right-click → see live rendered preview.</p>
+
+      <div class="opt-cards">
+        <div class="opt-card">
+          <div class="opt-card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="m9 15 2 2 4-4"/></svg>
+          </div>
+          <h3>Preview as Markdown</h3>
+          <p>Select Markdown text on any page, right-click, choose <em>Preview as Markdown</em>. A floating popup or sidebar shows the rendered HTML.</p>
+        </div>
+        <div class="opt-card">
+          <div class="opt-card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/></svg>
+          </div>
+          <h3>Convert HTML to Markdown</h3>
+          <p>Select HTML, right-click, choose <em>Convert HTML to Markdown</em>. The popup shows the Markdown source.</p>
+        </div>
+        <div class="opt-card">
+          <div class="opt-card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></svg>
+          </div>
+          <h3>Side Panel</h3>
+          <p>Click the extension icon <img src="icons/icon16.png" alt="" class="opt-inline-icon"> or press the toolbar button to open the side panel. Write Markdown or HTML, see live preview.</p>
+        </div>
+      </div>
+
+      <p class="opt-tip"><strong>Tip:</strong> Set your default display mode (popup vs sidebar) in Settings.</p>
+    </section>
+
+     <section id="opt-settings" class="opt-section" role="tabpanel">
+      <h2>Settings</h2>
+      <p class="opt-subtitle">Personalize how previews look and where they appear.</p>
+
+      <div class="opt-form">
+        <div class="opt-field">
+          <label for="opt-mode">Default display mode</label>
+          <select id="opt-mode">
+            <option value="popup">Popup (floating on page)</option>
+            <option value="sidebar">Side panel (docked right)</option>
+          </select>
+          <p class="opt-hint">Used when you right-click <em>Preview as Markdown</em> or <em>Convert HTML to Markdown</em>.</p>
+        </div>
+
+        <div class="opt-field">
+          <label for="opt-theme">Theme</label>
+          <select id="opt-theme">
+            <optgroup label="Solid">
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+              <option value="sepia">Sepia</option>
+              <option value="nord">Nord</option>
+              <option value="dracula">Dracula</option>
+              <option value="github">GitHub Dark</option>
+              <option value="solarized_light">Solarized Light</option>
+              <option value="solarized_dark">Solarized Dark</option>
+            </optgroup>
+            <optgroup label="Gradient">
+              <option value="aurora">Aurora</option>
+              <option value="sunset">Sunset</option>
+              <option value="ocean">Ocean</option>
+              <option value="midnight">Midnight</option>
+            </optgroup>
+          </select>
+        </div>
+
+        <div class="opt-field">
+          <label for="opt-fontsize">Font size</label>
+          <select id="opt-fontsize">
+            <option value="12">12</option><option value="13">13</option>
+            <option value="14">14</option><option value="15">15</option>
+            <option value="16">16</option><option value="18">18</option>
+            <option value="20">20</option>
+          </select>
+        </div>
+
+        <div class="opt-field">
+          <label for="opt-fontfamily">Font family</label>
+          <select id="opt-fontfamily">
+            <option value='-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'>System</option>
+            <option value='Georgia, "Times New Roman", serif'>Serif</option>
+            <option value='"Helvetica Neue", Arial, sans-serif'>Arial</option>
+            <option value='"Courier New", Consolas, Menlo, monospace'>Mono</option>
+            <option value='"Comic Sans MS", cursive'>Comic</option>
+            <option value='Palatino, "Palatino Linotype", serif'>Palatino</option>
+          </select>
+        </div>
+
+        <div class="opt-actions">
+          <button id="opt-save" class="opt-save-btn">Save Settings</button>
+          <span id="opt-status"></span>
+        </div>
+      </div>
+    </section>
+
+     <section id="opt-about" class="opt-section" role="tabpanel">
+      <h2>About</h2>
+      <p class="opt-subtitle">Markdown &amp; HTML Live Preview — v1.0.3</p>
+
+      <div class="opt-cards">
+        <div class="opt-card">
+          <div class="opt-card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+          </div>
+          <h3>How to use</h3>
+          <p>Select text on any page &rarr; right-click &rarr; choose <em>Preview as Markdown</em> or <em>Convert HTML to Markdown</em>. The result shows in a floating popup or side panel, depending on your default mode.</p>
+        </div>
+        <div class="opt-card">
+          <div class="opt-card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="10" x="3" y="7" rx="2"/><path d="M7 11h.01"/><path d="M11 11h.01"/></svg>
+          </div>
+          <h3>Toolbar icon</h3>
+          <p>Click the extension icon in the toolbar to open a quick menu. From there you can open the editor as a new tab, open the side panel, access settings, or view this page.</p>
+        </div>
+        <div class="opt-card">
+          <div class="opt-card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M12 3v18"/></svg>
+          </div>
+          <h3>Side panel editor</h3>
+          <p>Write or paste Markdown in the editor pane and see live rendered HTML on the right. Switch to HTML mode to paste HTML and get Markdown output. Use Split / Edit / Preview tabs to change the layout.</p>
+        </div>
+        <div class="opt-card">
+          <div class="opt-card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
+          </div>
+          <h3>Popup controls</h3>
+          <p>In the floating popup, use the toolbar to switch themes, change font family and size, copy the rendered HTML or Markdown source, and toggle between popup and sidebar display.</p>
+        </div>
+      </div>
+
+      <p class="opt-tip"><strong>Tip:</strong> Press <kbd>Esc</kbd> to close the floating popup. Drag the bottom-right corner to resize it.</p>
+    </section>
+   </div>
+  </main>
+
+  <script src="storage.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>
