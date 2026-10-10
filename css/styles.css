@@ -301,6 +301,50 @@ body {
 
 #editor::placeholder { color: var(--text2); opacity: .7; }
 
+/* CodeMirror editor — theme follows the active MarkLens theme via vars */
+.editor-pane .CodeMirror {
+  height: 100%;
+  background: transparent;
+  color: var(--text);
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.cm-s-marklens .CodeMirror-lines { padding: 16px 18px; }
+.cm-s-marklens .CodeMirror-gutters {
+  background: transparent;
+  border-right: 1px solid var(--border);
+}
+.cm-s-marklens .CodeMirror-linenumber { color: var(--text2); opacity: .7; }
+.cm-s-marklens .CodeMirror-cursor { border-left-color: var(--accent); }
+.cm-s-marklens .CodeMirror-selected { background: color-mix(in srgb, var(--accent) 25%, transparent); }
+.cm-s-marklens .CodeMirror-line::selection,
+.cm-s-marklens .CodeMirror-line > span::selection,
+.cm-s-marklens .CodeMirror-line > span > span::selection { background: color-mix(in srgb, var(--accent) 25%, transparent); }
+.cm-s-marklens .cm-header { color: var(--accent); font-weight: 650; }
+.cm-s-marklens .cm-quote { color: var(--text2); font-style: italic; }
+.cm-s-marklens .cm-link, .cm-s-marklens .cm-url { color: var(--accent); }
+.cm-s-marklens .cm-comment { color: var(--text2); }
+.cm-s-marklens .CodeMirror-matchingbracket { outline: 1px solid var(--accent); }
+.CodeMirror pre.CodeMirror-placeholder { color: var(--text2); opacity: .7; }
+/* Find/replace dialog */
+.CodeMirror-dialog {
+  background: var(--surface);
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  padding: 6px 10px;
+  font-size: 12px;
+}
+.CodeMirror-dialog input {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  outline: none;
+}
+.CodeMirror-dialog input:focus { border-color: var(--accent); }
+
 .preview-pane {
   padding: 18px 22px;
   background: transparent;

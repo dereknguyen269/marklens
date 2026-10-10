@@ -6,7 +6,8 @@ var DEFAULTS = {
   theme: 'light',
   mode: 'popup',
   view: 'split',
-  inputMode: 'md'
+  inputMode: 'md',
+  keymap: 'default'
 };
 
 var config = {};
@@ -46,9 +47,85 @@ const modeHtmlBtn = document.getElementById('mode-html');
 const toolTheme = document.getElementById('tool-theme');
 const toolFontSize = document.getElementById('tool-fontsize');
 const toolFontFamily = document.getElementById('tool-fontfamily');
+const toolKeymap = document.getElementById('tool-keymap');
+const previewPane = document.querySelector('.preview-pane');
 
 var inputMode = 'md'; // 'md' or 'html'
 var hlLink = document.querySelector('link[href*="highlight"]');
+
+// CodeMirror engine — replaces the plain textarea with a Markdown-mode
+// editor (line numbers, find/replace, Vim keymap). Every read/write goes
+// through getText()/setText() so the hidden textarea remains a working
+// fallback when the vendored scripts fail to load.
+var cm = null;
+var cmScroll = null;
+
+function getText() {
+  if (cm) return cm.getValue();
+  return editor ? editor.value : '';
+}
+
+function setText(v) {
+  if (cm) cm.setValue(v || '');
+  else if (editor) editor.value = v || '';
+}
+
+function focusEditor() {
+  if (cm) cm.focus();
+  else if (editor) editor.focus();
+}
+
+function setPlaceholder(mode) {
+  var text = mode === 'html'
+    ? '# Paste HTML here — see Markdown output on the right'
+    : '# Write or paste Markdown here…\n\nSelect text on a page → right-click → "Preview as Markdown"';
+  if (cm) cm.setOption('placeholder', text);
+  else if (editor) editor.placeholder = text;
+}
+
+function setKeymap(name, silent) {
+  var okVim = !!(globalThis.CodeMirror && globalThis.CodeMirror.Vim);
+  config.keymap = (name === 'vim' && okVim) ? 'vim' : 'default';
+  if (cm) cm.setOption('keyMap', config.keymap);
+  if (toolKeymap) toolKeymap.value = config.keymap;
+  if (!silent) saveConfig();
+}
+
+function initEditor() {
+  var CM = globalThis.CodeMirror;
+  if (cm || !CM || typeof CM.fromTextArea !== 'function') return;
+  if (!CM.modes || !CM.modes.markdown) {
+    console.warn('[MD] CodeMirror markdown mode missing — using textarea');
+    return;
+  }
+  try {
+    cm = CM.fromTextArea(editor, {
+      mode: 'markdown',
+      theme: 'marklens',
+      lineNumbers: true,
+      lineWrapping: true,
+      tabSize: 2,
+      indentWithTabs: false,
+      highlightFormatting: true,
+      placeholder: editor ? editor.placeholder : '',
+      keyMap: config.keymap === 'vim' ? 'vim' : 'default'
+    });
+    cmScroll = cm.getScrollerElement();
+    cm.on('change', function () { scheduleRender(); saveDraft(false); });
+    if (cmScroll && previewPane) {
+      cmScroll.addEventListener('scroll', function () {
+        if (scrollSyncing) return;
+        scrollSyncing = true;
+        syncScroll(cmScroll, previewPane);
+        scrollSyncing = false;
+      });
+    }
+  } catch (e) {
+    console.error('[MD] CodeMirror init failed — using textarea:', e);
+    cm = null;
+    cmScroll = null;
+  }
+}
 
 // Draft autosave — editor text + input mode persist in chrome.storage.local
 // under a separate key (never mixed into mdPreviewConfig). Restored on boot
@@ -58,8 +135,8 @@ var draftTimer = null;
 var draftNoteTimer = null;
 
 function currentMarkdown() {
-  if (inputMode === 'html') return htmlToMarkdown(editor ? editor.value : '');
-  return editor ? editor.value : '';
+  if (inputMode === 'html') return htmlToMarkdown(getText());
+  return getText();
 }
 
 function flashDraftNote() {
@@ -75,7 +152,7 @@ function saveDraft(immediate) {
     if (!chrome.storage || !chrome.storage.local) return;
     var payload = {};
     payload[DRAFT_KEY] = {
-      text: editor ? editor.value : '',
+      text: getText(),
       inputMode: inputMode,
       updatedAt: Date.now()
     };
@@ -105,7 +182,7 @@ function updateCounts(src) {
 }
 
 function renderNow() {
-  var src = editor ? editor.value : '';
+  var src = getText();
   updateCounts(src);
   if (inputMode === 'html') { convertHtmlToMd(src); return; }
   if (!globalThis.marked || typeof globalThis.marked.parse !== 'function') {
@@ -156,6 +233,7 @@ function applyConfig() {
   }
   if (toolFontSize) toolFontSize.value = String(config.fontSize);
   if (toolFontFamily) toolFontFamily.value = config.fontFamily;
+  if (toolKeymap) toolKeymap.value = config.keymap || 'default';
   applyTheme(config.theme || DEFAULTS.theme);
 }
 
@@ -197,11 +275,7 @@ function setInputMode(mode, silent) {
   config.inputMode = mode;
   modeMdBtn.classList.toggle('active', mode === 'md');
   modeHtmlBtn.classList.toggle('active', mode === 'html');
-  if (editor) {
-    editor.placeholder = mode === 'html'
-      ? '# Paste HTML here — see Markdown output on the right'
-      : '# Write or paste Markdown here…\n\nSelect text on a page → right-click → "Preview as Markdown"';
-  }
+  setPlaceholder(mode);
   if (!silent) {
     saveConfig();
     saveDraft(true);
@@ -272,13 +346,19 @@ function scheduleRender() {
   renderTimer = setTimeout(renderNow, 120);
 }
 
-editor.addEventListener('input', function () { scheduleRender(); saveDraft(false); });
+// Textarea fallback path: when CodeMirror is active the textarea is hidden
+// and all changes flow through cm.on('change') in initEditor().
+editor.addEventListener('input', function () {
+  if (cm) return;
+  scheduleRender();
+  saveDraft(false);
+});
 
 clearBtn.addEventListener('click', function () {
-  editor.value = '';
+  setText('');
   renderNow();
   saveDraft(true);
-  editor.focus();
+  focusEditor();
 });
 
 settingsBtn.addEventListener('click', function () {
@@ -400,7 +480,7 @@ if (editorPane) {
       var text = String(reader.result || '');
       var isHtml = /\.html?$/i.test(file.name || '') || (inputMode === 'html' && !/\.(md|markdown|mdown|mkdn|txt|text)$/i.test(file.name || ''));
       setInputMode(isHtml ? 'html' : 'md', true);
-      editor.value = text;
+      setText(text);
       renderNow();
       saveDraft(true);
       if (status) { status.textContent = 'Opened ' + (file.name || 'file'); status.classList.remove('error'); }
@@ -423,21 +503,23 @@ function syncScroll(from, to) {
   to.scrollTop = (from.scrollTop / fromMax) * toMax;
 }
 
-if (editor && preview) {
-  var previewPane = document.querySelector('.preview-pane');
-  editor.addEventListener('scroll', function () {
-    if (scrollSyncing || !previewPane) return;
-    scrollSyncing = true;
-    syncScroll(editor, previewPane);
-    scrollSyncing = false;
-  });
-  if (previewPane) previewPane.addEventListener('scroll', function () {
-    if (scrollSyncing) return;
-    scrollSyncing = true;
-    syncScroll(previewPane, editor);
-    scrollSyncing = false;
-  });
-}
+// Scroll sync — preview → editor leg. The editor → preview leg is wired in
+// initEditor (CodeMirror scroller); the textarea fallback is below and
+// stays dormant while CM is active (hidden textareas don't scroll).
+if (previewPane) previewPane.addEventListener('scroll', function () {
+  if (scrollSyncing) return;
+  var target = cmScroll || editor;
+  if (!target) return;
+  scrollSyncing = true;
+  syncScroll(previewPane, target);
+  scrollSyncing = false;
+});
+if (editor && previewPane) editor.addEventListener('scroll', function () {
+  if (scrollSyncing || cmScroll) return;
+  scrollSyncing = true;
+  syncScroll(editor, previewPane);
+  scrollSyncing = false;
+});
 
 // Zen mode: hide all chrome for distraction-free writing. Session-only
 // (not persisted) so it can never trap a user across restarts. Esc exits.
@@ -470,6 +552,10 @@ toolFontFamily.addEventListener('change', function () {
   saveConfig();
 });
 
+if (toolKeymap) toolKeymap.addEventListener('change', function () {
+  setKeymap(this.value);
+});
+
 // Apply a Markdown string pushed from the context menu.
 // Silent: the auto-applied view/mode must not overwrite the user's saved
 // view/mode in storage — it only changes the live session.
@@ -478,7 +564,7 @@ var pendingApplied = false;
 function applyPending(pending) {
   if (!pending) return;
   pendingApplied = true;
-  editor.value = pending;
+  setText(pending);
   setInputMode('md', true);
   setView('preview', true);
   renderNow();
@@ -488,7 +574,7 @@ function applyPending(pending) {
 function applyPendingHtml(html) {
   if (!html) return;
   pendingApplied = true;
-  editor.value = html;
+  setText(html);
   setInputMode('html', true);
   setView('split', true);
   renderNow();
@@ -528,11 +614,12 @@ chrome.storage.onChanged.addListener(function (changes, area) {
 // (if any) is restored so work survives a closed panel.
 loadConfig(function () {
   applyConfig();
+  initEditor();
   if (pendingApplied) { renderNow(); return; }
   restoreDraft(function (draft) {
     if (pendingApplied) { renderNow(); return; }
     if (draft && draft.text) {
-      editor.value = draft.text;
+      setText(draft.text);
       setInputMode(draft.inputMode === 'html' ? 'html' : 'md', true);
       setView(config.view || 'split', true);
       renderNow();

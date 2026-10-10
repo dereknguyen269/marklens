@@ -11,6 +11,7 @@ Free. No signup. Works offline — everything runs locally in your browser, so M
 - **Preview as Markdown** — select Markdown text on any page, right-click → *Preview as Markdown*, and see it rendered in a floating popup (or the side panel).
 - **Convert HTML to Markdown** — select HTML, right-click → *Convert HTML to Markdown*, and get the Markdown source.
 - **Side panel editor** — write or paste Markdown/HTML with a live split / edit / preview layout.
+- **Code editor** — Markdown highlighting, line numbers, find/replace (`Ctrl+F`), and optional Vim bindings (Keys selector).
 - **Draft autosave** — your editor text persists locally in the browser; work survives a closed tab. No signup, no account, no servers.
 - **Export anywhere** — download your document as Markdown, styled HTML, or print / save as PDF with one click.
 - **Drag & drop** — drop `.md`, `.txt`, or `.html` files onto the editor to open them instantly.

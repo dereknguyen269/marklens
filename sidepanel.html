@@ -5,6 +5,8 @@
   <link rel="icon" type="image/png" href="icons/favicon.png">
   <link rel="stylesheet" href="css/styles.css">
   <link rel="stylesheet" href="css/highlight.css">
+  <link rel="stylesheet" href="vendor/codemirror/codemirror.css">
+  <link rel="stylesheet" href="vendor/codemirror/addon/dialog/dialog.css">
 </head>
 <body>
   <header class="topbar">
@@ -73,6 +75,14 @@
         <option value='Palatino, "Palatino Linotype", serif'>Palatino</option>
       </select>
     </div>
+    <div class="tool-divider"></div>
+    <div class="tool-grp">
+      <label for="tool-keymap">Keys</label>
+      <select id="tool-keymap" title="Editor key bindings">
+        <option value="default">Default</option>
+        <option value="vim">Vim</option>
+      </select>
+    </div>
   </div>
 
   <main id="workspace" class="view-split">
@@ -112,6 +122,14 @@ Select text on a page → right-click → “Preview as Markdown”"></textarea>
   <script src="vendor/turndown.min.js"></script>
   <script src="vendor/turndown-plugin-gfm.js"></script>
   <script src="vendor/dompurify.min.js"></script>
+  <script src="vendor/codemirror/codemirror.js"></script>
+  <script src="vendor/codemirror/mode/xml/xml.js"></script>
+  <script src="vendor/codemirror/mode/markdown/markdown.js"></script>
+  <script src="vendor/codemirror/addon/display/placeholder.js"></script>
+  <script src="vendor/codemirror/addon/search/searchcursor.js"></script>
+  <script src="vendor/codemirror/addon/search/search.js"></script>
+  <script src="vendor/codemirror/addon/dialog/dialog.js"></script>
+  <script src="vendor/codemirror/keymap/vim.js"></script>
   <script src="js/themes.js"></script>
   <script src="js/setupMarked.js"></script>
   <script src="js/storage.js"></script>
