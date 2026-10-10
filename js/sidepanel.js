@@ -59,6 +59,11 @@ var hlLink = document.querySelector('link[href*="highlight"]');
 // fallback when the vendored scripts fail to load.
 var cm = null;
 var cmScroll = null;
+// True while setText() drives the editor programmatically. CodeMirror fires
+// 'change' synchronously from setValue(), and without this guard every
+// pending-selection / draft-restore / drop would schedule a second render
+// that wipes the status message the caller just set ('From selection', …).
+var silentSet = false;
 
 function getText() {
   if (cm) return cm.getValue();
@@ -66,7 +71,10 @@ function getText() {
 }
 
 function setText(v) {
-  if (cm) cm.setValue(v || '');
+  if (cm) {
+    silentSet = true;
+    try { cm.setValue(v || ''); } finally { silentSet = false; }
+  }
   else if (editor) editor.value = v || '';
 }
 
@@ -111,7 +119,11 @@ function initEditor() {
       keyMap: config.keymap === 'vim' ? 'vim' : 'default'
     });
     cmScroll = cm.getScrollerElement();
-    cm.on('change', function () { scheduleRender(); saveDraft(false); });
+    cm.on('change', function () {
+      if (silentSet) return;
+      scheduleRender();
+      saveDraft(false);
+    });
     if (cmScroll && previewPane) {
       cmScroll.addEventListener('scroll', function () {
         if (scrollSyncing) return;
