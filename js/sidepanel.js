@@ -269,6 +269,7 @@ function convertHtmlToMd(html) {
     if (!hasLib) {
       if (status) { status.textContent = 'Converter missing'; status.classList.add('error'); }
       if (preview) preview.innerHTML = '<p style="color:#c00">TurndownService not loaded — reload the extension.</p>';
+      console.error('[MD] TurndownService missing: vendor/turndown.min.js did not load');
       return;
     }
     if (status) { status.textContent = 'Convert error'; status.classList.add('error'); }
@@ -625,6 +626,15 @@ chrome.storage.onChanged.addListener(function (changes, area) {
 // takes precedence over the restored view/mode; otherwise the autosaved draft
 // (if any) is restored so work survives a closed panel.
 loadConfig(function () {
+  // Startup self-check: name any vendored global that failed to load so a
+  // broken install shows a precise diagnosis instead of a blank preview.
+  var need = ['marked', 'TurndownService', 'DOMPurify', 'MD_SIDEPANEL_THEMES', 'setupMarked', 'mdStorage', 'CodeMirror'];
+  var missing = need.filter(function (k) { return !globalThis[k]; });
+  if (missing.length && status) {
+    status.textContent = 'Startup: missing ' + missing.join(', ');
+    status.classList.add('error');
+    console.error('[MD] missing globals at boot:', missing.join(', '));
+  }
   applyConfig();
   initEditor();
   if (pendingApplied) { renderNow(); return; }
