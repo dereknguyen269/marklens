@@ -18,7 +18,7 @@ Free. No signup. Works offline — everything runs locally in your browser, so M
 - **Synced scrolling** — editor and preview panes stay aligned in both directions.
 - **Zen mode** — one-click distraction-free writing (`Alt+Z`, `Esc` to exit).
 - **Open as a new tab** — the same editor in a full-page view.
-- **12 themes** — 8 solid (Light, Dark, Sepia, Nord, Dracula, GitHub Dark, Solarized Light/Dark) plus 4 gradient themes (Aurora, Sunset, Ocean, Midnight).
+- **22 themes** — 16 solid (Light, Dark, Sepia, Nord, Dracula, GitHub Dark/Light, Solarized Light/Dark, Monokai, One Dark, Gruvbox, Tokyo Night, Everforest, Rosé Pine, High Contrast) plus 6 gradient themes (Aurora, Sunset, Ocean, Midnight, Forest, Candy).
 - **Typography controls** — adjustable font family and size.
 - **Rich Markdown** — GFM tables, task lists, footnotes, definition lists, emoji shortcodes, syntax highlighting, highlight/subscript/superscript, and heading IDs.
 - **Draggable & resizable** floating popup; press <kbd>Esc</kbd> to close.
