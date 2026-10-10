@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="css/styles.css">
 </head>
 <body class="popup-body">
   <div class="popup-wrap">
     <header class="popup-header">
       <img src="icons/icon48.png" alt="" class="popup-logo">
-      <div class="popup-title">Markdown &amp; HTML Live Preview</div>
+      <div class="popup-title">MarkLens</div>
     </header>
 
     <div class="popup-menu" role="menu" aria-label="Quick actions">
@@ -57,9 +57,9 @@
     </div>
 
     <footer class="popup-footer">
-      <span class="popup-version">v1.0.3</span>
+      <span class="popup-version" id="popup-version"></span>
       <div class="popup-mode-row">
-        <span class="popup-mode-label">Default mode:</span>
+        <label class="popup-mode-label" for="popup-mode-select">Default mode:</label>
         <select id="popup-mode-select">
           <option value="popup">Popup</option>
           <option value="sidebar">Side panel</option>
@@ -68,7 +68,7 @@
     </footer>
   </div>
 
-  <script src="storage.js"></script>
-  <script src="popup.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/popup.js"></script>
 </body>
 </html>

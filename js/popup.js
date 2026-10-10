@@ -2,6 +2,13 @@ var DEFAULTS = { mode: 'popup' };
 
 var modeSelect = document.getElementById('popup-mode-select');
 
+// Version is injected at runtime so manifest/popup/options can't drift.
+try {
+  var manifestVersion = (chrome.runtime.getManifest() || {}).version;
+  var versionEl = document.getElementById('popup-version');
+  if (versionEl && manifestVersion) versionEl.textContent = 'v' + manifestVersion;
+} catch (e) {}
+
 globalThis.mdStorage.load(DEFAULTS, function (cfg) {
   if (modeSelect) modeSelect.value = cfg.mode || 'popup';
 });

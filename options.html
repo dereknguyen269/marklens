@@ -4,11 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" type="image/png" href="icons/favicon.png">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="css/styles.css">
 </head>
 <body class="options-body">
   <header class="topbar">
-    <div class="title"><img src="icons/icon48.png" alt="" class="brand-logo">Markdown &amp; HTML Live Preview</div>
+    <div class="title"><img src="icons/icon48.png" alt="" class="brand-logo">MarkLens</div>
     <div class="view-toggle" role="tablist" aria-label="Pages">
       <button class="tab opt-tab active" role="tab" aria-selected="true" data-tab="home">Home</button>
       <button class="tab opt-tab" role="tab" aria-selected="false" data-tab="settings">Settings</button>
@@ -23,7 +23,7 @@
   <main class="options-content">
    <div class="options-inner">
      <section id="opt-home" class="opt-section active" role="tabpanel">
-      <h2>Markdown &amp; HTML Live Preview</h2>
+      <h2>MarkLens — Instant Markdown Renderer &amp; Page Converter</h2>
       <p class="opt-subtitle">Select text on any page → right-click → see live rendered preview.</p>
 
       <div class="opt-cards">
@@ -50,7 +50,7 @@
         </div>
       </div>
 
-      <p class="opt-tip"><strong>Tip:</strong> Set your default display mode (popup vs sidebar) in Settings.</p>
+      <p class="opt-tip"><strong>Tip:</strong> Set your default display mode (popup vs sidebar) in Settings. Your drafts autosave locally — download them as Markdown, styled HTML, or PDF from the editor status bar, or press <kbd>Alt+Z</kbd> for Zen mode.</p>
     </section>
 
      <section id="opt-settings" class="opt-section" role="tabpanel">
@@ -113,14 +113,14 @@
 
         <div class="opt-actions">
           <button id="opt-save" class="opt-save-btn">Save Settings</button>
-          <span id="opt-status"></span>
+          <span id="opt-status" aria-live="polite" role="status"></span>
         </div>
       </div>
     </section>
 
      <section id="opt-about" class="opt-section" role="tabpanel">
       <h2>About</h2>
-      <p class="opt-subtitle">Markdown &amp; HTML Live Preview — v1.0.3</p>
+      <p class="opt-subtitle" id="opt-version">MarkLens — Instant Markdown Renderer &amp; Page Converter</p>
 
       <div class="opt-cards">
         <div class="opt-card">
@@ -158,7 +158,7 @@
    </div>
   </main>
 
-  <script src="storage.js"></script>
-  <script src="options.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/options.js"></script>
 </body>
 </html>

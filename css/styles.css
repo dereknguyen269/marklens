@@ -92,6 +92,13 @@ html {
   }
 }
 
+/* High-contrast preference: strengthen borders, drop translucency. */
+@media (prefers-contrast: more) {
+  .opt-card, .popup-item, .opt-open-btn, .opt-save-btn { border-width: 2px; }
+  .popup-header { background: var(--surface); }
+  .opt-card:hover { transform: none; }
+}
+
 body {
   display: flex;
   flex-direction: column;
@@ -353,7 +360,7 @@ body {
   text-overflow: ellipsis;
 }
 
-#copy-btn, #clear-btn {
+#copy-btn, #clear-btn, #dl-md-btn, #dl-html-btn, #print-btn {
   border: 1px solid var(--border);
   background: var(--surface);
   border-radius: var(--radius-sm);
@@ -365,8 +372,44 @@ body {
   transition: border-color var(--dur), color var(--dur), background var(--dur), box-shadow var(--dur);
 }
 
-#copy-btn:hover, #clear-btn:hover { border-color: var(--accent); color: var(--accent); box-shadow: var(--shadow-sm); }
-#copy-btn:active, #clear-btn:active { transform: translateY(.5px); }
+#copy-btn:hover, #clear-btn:hover, #dl-md-btn:hover, #dl-html-btn:hover, #print-btn:hover { border-color: var(--accent); color: var(--accent); box-shadow: var(--shadow-sm); }
+#copy-btn:active, #clear-btn:active, #dl-md-btn:active, #dl-html-btn:active, #print-btn:active { transform: translateY(.5px); }
+
+#draft-note {
+  white-space: nowrap;
+  color: var(--text2);
+  opacity: .8;
+}
+
+#zen-btn.active { color: var(--accent); border-color: var(--accent); }
+
+/* Drag & drop target highlight */
+#workspace.drop-armed .editor-pane {
+  outline: 2px dashed var(--accent);
+  outline-offset: -8px;
+}
+
+/* Zen mode — hide all chrome for distraction-free writing */
+body.zen .topbar,
+body.zen .toolsbar,
+body.zen .statusbar { display: none; }
+body.zen .preview-pane { padding: 28px 8vw; }
+body.zen #editor { padding: 28px 8vw; font-size: 15px; }
+
+/* Print — output only the rendered document (used for Save as PDF) */
+@media print {
+  .topbar, .toolsbar, .statusbar, .editor-pane { display: none !important; }
+  #workspace, #workspace.view-edit, #workspace.view-preview { display: block !important; }
+  #workspace.view-edit .preview-pane { display: block !important; }
+  .preview-pane {
+    padding: 0 !important;
+    overflow: visible !important;
+    color: #000;
+  }
+  .markdown-body { color: #000; }
+  .markdown-body a { color: #000; text-decoration: none; }
+  .markdown-body pre, .markdown-body code { background: #f5f5f5 !important; }
+}
 
 /* --- Markdown render styles --- */
 .markdown-body { line-height: 1.7; word-wrap: break-word; }

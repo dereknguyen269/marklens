@@ -1,19 +1,19 @@
 {
   "manifest_version": 3,
-  "name": "Markdown & HTML Live Preview",
+  "name": "MarkLens — Instant Markdown Renderer & Page Converter",
   "version": "1.0.3",
   "description": "Select Markdown text on any page — see a live rendered preview floating on the page. Or open the side panel to write your own.",
   "minimum_chrome_version": "116",
-  "permissions": ["sidePanel", "contextMenus", "storage", "scripting", "tabs", "activeTab"],
+  "permissions": ["sidePanel", "contextMenus", "storage", "scripting", "activeTab"],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "js/background.js"
   },
   "options_ui": {
     "page": "options.html",
     "open_in_tab": true
   },
   "action": {
-    "default_title": "Markdown & HTML Live Preview",
+    "default_title": "MarkLens — Instant Markdown Renderer & Page Converter",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
@@ -30,6 +30,6 @@
     "128": "icons/icon128.png"
   },
   "web_accessible_resources": [
-    { "resources": ["highlight.css", "highlight-dark.css", "icons/favicon.png"], "matches": ["<all_urls>"] }
+    { "resources": ["css/highlight.css", "css/highlight-dark.css", "icons/favicon.png"], "matches": ["<all_urls>"] }
   ]
 }

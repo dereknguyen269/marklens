@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8">
   <link rel="icon" type="image/png" href="icons/favicon.png">
-  <link rel="stylesheet" href="styles.css">
-  <link rel="stylesheet" href="highlight.css">
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/highlight.css">
 </head>
 <body>
   <header class="topbar">
-    <div class="title"><img src="icons/icon48.png" alt="" class="brand-logo">Markdown &amp; HTML Live Preview</div>
+    <div class="title"><img src="icons/icon48.png" alt="" class="brand-logo">MarkLens</div>
     <div class="view-toggle" role="tablist" aria-label="Layout">
       <button id="tab-split" class="tab active" role="tab" aria-selected="true" data-view="split" title="Split view (Alt+1)">Split</button>
       <button id="tab-edit" class="tab" role="tab" aria-selected="false" data-view="edit" title="Editor only (Alt+2)">Edit</button>
@@ -18,6 +18,9 @@
       <button id="mode-md" class="mode-btn active" title="Editor content is Markdown">MD</button>
       <button id="mode-html" class="mode-btn" title="Editor content is HTML — convert to Markdown">HTML</button>
     </div>
+    <button id="zen-btn" class="icon-btn" title="Zen mode — distraction-free writing (Alt+Z)" aria-label="Zen mode">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+    </button>
     <button id="settings-btn" class="icon-btn" title="Settings" aria-label="Settings">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
     </button>
@@ -87,27 +90,31 @@ Select text on a page → right-click → “Preview as Markdown”"></textarea>
     <div class="status-left">
       <span id="status" role="status">Live</span>
       <span id="counts" title="Word and character count"></span>
+      <span id="draft-note" title="Draft autosaves locally in your browser"></span>
     </div>
     <div class="status-actions">
-      <button id="clear-btn" title="Clear editor and preview">Clear</button>
-      <button id="copy-btn" title="Copy rendered HTML (Ctrl+Enter / Ctrl+S)">Copy</button>
+      <button id="dl-md-btn" title="Download as Markdown file" aria-live="polite">↓ MD</button>
+      <button id="dl-html-btn" title="Download as styled HTML file" aria-live="polite">↓ HTML</button>
+      <button id="print-btn" title="Print or save as PDF" aria-live="polite">PDF</button>
+      <button id="clear-btn" title="Clear editor and preview" aria-live="polite">Clear</button>
+      <button id="copy-btn" title="Copy rendered HTML (Ctrl+Enter / Ctrl+S)" aria-live="polite">Copy</button>
     </div>
   </footer>
 
-  <script src="marked.min.js"></script>
-  <script src="marked-footnote.umd.js"></script>
-  <script src="marked-deflist.umd.js"></script>
-  <script src="marked-emoji.umd.js"></script>
-  <script src="emoji-map.js"></script>
-  <script src="highlight.min.js"></script>
-  <script src="marked-highlight.umd.js"></script>
-  <script src="marked-extras.umd.js"></script>
-  <script src="turndown.min.js"></script>
-  <script src="turndown-plugin-gfm.js"></script>
-  <script src="dompurify.min.js"></script>
-  <script src="themes.js"></script>
-  <script src="setupMarked.js"></script>
-  <script src="storage.js"></script>
-  <script src="sidepanel.js"></script>
+  <script src="vendor/marked.min.js"></script>
+  <script src="vendor/marked-footnote.umd.js"></script>
+  <script src="vendor/marked-deflist.umd.js"></script>
+  <script src="vendor/marked-emoji.umd.js"></script>
+  <script src="vendor/emoji-map.js"></script>
+  <script src="vendor/highlight.min.js"></script>
+  <script src="vendor/marked-highlight.umd.js"></script>
+  <script src="vendor/marked-extras.umd.js"></script>
+  <script src="vendor/turndown.min.js"></script>
+  <script src="vendor/turndown-plugin-gfm.js"></script>
+  <script src="vendor/dompurify.min.js"></script>
+  <script src="js/themes.js"></script>
+  <script src="js/setupMarked.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/sidepanel.js"></script>
 </body>
 </html>

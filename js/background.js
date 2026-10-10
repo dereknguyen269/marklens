@@ -1,4 +1,4 @@
-// background.js — service worker for Markdown & HTML Live Preview
+// background.js — service worker for MarkLens — Instant Markdown Renderer & Page Converter
 
 const MENU_ID = 'preview-markdown-selection';
 const MENU_HTML_TO_MD = 'convert-html-to-md';
@@ -37,21 +37,21 @@ function stashForSidePanel(isHtmlToMd, text, html) {
 }
 
 var INJECT_FILES = [
-  'marked.min.js',
-  'marked-footnote.umd.js',
-  'marked-deflist.umd.js',
-  'marked-emoji.umd.js',
-  'emoji-map.js',
-  'highlight.min.js',
-  'marked-highlight.umd.js',
-  'marked-extras.umd.js',
-  'turndown.min.js',
-  'turndown-plugin-gfm.js',
-  'setupMarked.js',
-  'themes.js',
-  'dompurify.min.js',
-  'storage.js',
-  'content.js'
+  'vendor/marked.min.js',
+  'vendor/marked-footnote.umd.js',
+  'vendor/marked-deflist.umd.js',
+  'vendor/marked-emoji.umd.js',
+  'vendor/emoji-map.js',
+  'vendor/highlight.min.js',
+  'vendor/marked-highlight.umd.js',
+  'vendor/marked-extras.umd.js',
+  'vendor/turndown.min.js',
+  'vendor/turndown-plugin-gfm.js',
+  'js/setupMarked.js',
+  'js/themes.js',
+  'vendor/dompurify.min.js',
+  'js/storage.js',
+  'js/content.js'
 ];
 
 // True once the full library + content stack is already injected into the page.
@@ -112,7 +112,7 @@ chrome.contextMenus.onClicked.addListener(function (info, tab) {
         var ready = res && res[0] && res[0].result;
         return chrome.scripting.executeScript({
           target: { tabId: tab.id },
-          files: ready ? ['content.js'] : INJECT_FILES
+          files: ready ? ['js/content.js'] : INJECT_FILES
         });
       }).then(function () {
         return chrome.scripting.executeScript({

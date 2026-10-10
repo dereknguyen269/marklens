@@ -20,7 +20,7 @@ function loadSettings() {
   });
 }
 
-function saveSettings() {
+function saveSettings(manual) {
   var cfg = {
     mode: modeEl.value,
     theme: themeEl.value,
@@ -28,11 +28,26 @@ function saveSettings() {
     fontFamily: fontFamilyEl.value
   };
   globalThis.mdStorage.save(cfg);
-  statusEl.textContent = 'Saved!';
+  statusEl.textContent = manual === false ? 'Saved ✓' : 'Saved!';
   setTimeout(function () { statusEl.textContent = ''; }, 2000);
 }
 
-saveBtn.addEventListener('click', saveSettings);
+saveBtn.addEventListener('click', function () { saveSettings(true); });
+
+// Autosave on change so edits can't be lost; the Save button stays as an
+// explicit confirmation for users who expect one.
+[modeEl, themeEl, fontSizeEl, fontFamilyEl].forEach(function (el) {
+  if (el) el.addEventListener('change', function () { saveSettings(false); });
+});
+
+// Version is injected at runtime so manifest/popup/options can't drift.
+try {
+  var manifestVersion = (chrome.runtime.getManifest() || {}).version;
+  var versionEl = document.getElementById('opt-version');
+  if (versionEl && manifestVersion) {
+    versionEl.textContent = 'MarkLens — Instant Markdown Renderer & Page Converter — v' + manifestVersion;
+  }
+} catch (e) {}
 
 var openEditorBtn = document.getElementById('opt-open-editor');
 if (openEditorBtn) {

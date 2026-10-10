@@ -10,39 +10,15 @@
       : html;
   }
 
+  // Box already exists: the message + key listeners from the first injection
+  // are still active (same page, same DOM). Return without re-registering
+  // anything — stacking another onMessage/document listener per right-click
+  // caused duplicate renders and leaked handlers.
   if (document.getElementById(NS + '-box')) {
-    var existingBox = document.getElementById(NS + '-box');
-    var existingBody = existingBox.querySelector('#' + NS + '-body');
-    if (chrome.runtime && chrome.runtime.onMessage) {
-      chrome.runtime.onMessage.addListener(function (msg) {
-        if (msg && msg.action === 'renderMarkdown') {
-          if (msg.text && existingBody) {
-            try { existingBody.innerHTML = safeHtml((globalThis.marked || {}).parse(msg.text)); }
-            catch (e) { existingBody.innerHTML = '<pre style="color:#c00">' + safeHtml(String(e)) + '</pre>'; }
-          }
-          existingBox.style.display = 'flex';
-          positionBox(existingBox, msg.rect || null);
-        }
-        if (msg && msg.action === 'convertHtmlToMarkdown') {
-          if (msg.html && existingBody) {
-            var TS = globalThis.TurndownService;
-            if (TS) {
-              var ts = new TS({ headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-' });
-              if (globalThis.turndownPluginGfm) ts.use(globalThis.turndownPluginGfm.gfm);
-              var md = ts.turndown(msg.html).replace(/\n{3,}/g, '\n\n').trim();
-              existingBody.innerHTML = '<pre style="white-space:pre-wrap;word-wrap:break-word;margin:0;font-family:Consolas,Menlo,monospace;font-size:inherit;color:inherit;background:none;"></pre>';
-              existingBody.firstChild.textContent = md;
-            } else {
-              existingBody.innerHTML = '<pre style="color:#c00">TurndownService not loaded.</pre>';
-            }
-          }
-          existingBox.style.display = 'flex';
-          positionBox(existingBox, msg.rect || null);
-        }
-      });
-    }
     return;
   }
+
+  var lastSourceText = '';
 
   var DEFAULTS = {
     width: 380, height: 360, fontSize: 14,
@@ -56,8 +32,8 @@
   }
   function saveConfig() { globalThis.mdStorage.save(config); }
 
-  var LIGHT_HL = chrome.runtime.getURL('highlight.css');
-  var DARK_HL = chrome.runtime.getURL('highlight-dark.css');
+  var LIGHT_HL = chrome.runtime.getURL('css/highlight.css');
+  var DARK_HL = chrome.runtime.getURL('css/highlight-dark.css');
 
   var THEMES = globalThis.MD_THEMES;
 
@@ -179,25 +155,25 @@
         padding: 14px 18px !important; overflow: auto !important;
         line-height: 1.65 !important; flex: 1 1 auto !important; min-height: 0 !important;
         scrollbar-width: thin !important;
-        scrollbar-color: var(--md-quote-color, #656d76) transparent !important;
+        scrollbar-color: var(--md-text, #656d76) transparent !important;
       }
       #${NS}-body::-webkit-scrollbar { width: 8px !important; height: 8px !important; }
       #${NS}-body::-webkit-scrollbar-track { background: transparent !important; }
       #${NS}-body::-webkit-scrollbar-corner { background: transparent !important; }
       #${NS}-body::-webkit-scrollbar-thumb {
-        background: color-mix(in srgb, var(--md-quote-color, #656d76) 55%, transparent) !important;
+        background: color-mix(in srgb, var(--md-text, #656d76) 45%, transparent) !important;
         border-radius: 999px !important;
         border: 2px solid transparent !important;
         background-clip: padding-box !important;
         min-height: 24px !important;
       }
       #${NS}-body::-webkit-scrollbar-thumb:hover {
-        background: color-mix(in srgb, var(--md-quote-color, #656d76) 85%, transparent) !important;
+        background: color-mix(in srgb, var(--md-text, #656d76) 75%, transparent) !important;
         background-clip: padding-box !important;
         border: 2px solid transparent !important;
       }
       #${NS}-body::-webkit-scrollbar-thumb:active {
-        background: var(--md-quote-color, #656d76) !important;
+        background: var(--md-text, #656d76) !important;
         background-clip: padding-box !important;
         border: 2px solid transparent !important;
       }
@@ -238,9 +214,18 @@
       #${NS}-body sub,#${NS}-body sup{font-size:.75em;}
       #${NS}-resize {
         position: absolute !important; right: 0 !important; bottom: 0 !important;
-        width: 16px !important; height: 16px !important; cursor: nwse-resize !important;
-        background: linear-gradient(135deg, transparent 45%, var(--md-resize, rgba(0,0,0,.15)) 48%, transparent 52%, var(--md-resize, rgba(0,0,0,.15)) 60%, transparent 64%) !important;
+        width: 24px !important; height: 24px !important; cursor: nwse-resize !important;
+        touch-action: none !important;
+        background: linear-gradient(135deg, transparent 55%, var(--md-resize, rgba(0,0,0,.15)) 58%, transparent 62%, var(--md-resize, rgba(0,0,0,.15)) 68%, transparent 72%) bottom right / 16px 16px no-repeat !important;
         z-index: 2 !important;
+      }
+      /* Narrow popup: hide uppercase group labels so Theme/Size/Font/Copy stay on fewer rows. */
+      @media (max-width: 340px) {
+        #${NS}-tools .${NS}-grp label { display: none !important; }
+      }
+      /* High-contrast preference: drop translucency/blur so text stays readable. */
+      @media (prefers-contrast: more) {
+        #${NS}-box { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
       }
     </style>
     <link id="${NS}-hl" rel="stylesheet" href="${LIGHT_HL}">
@@ -301,11 +286,11 @@
           </select>
         </div>
         <span class="${NS}-spacer"></span>
-        <button id="${NS}-copy" title="Copy rendered HTML (Ctrl+Enter)">Copy HTML</button>
+        <button id="${NS}-copy" title="Copy rendered HTML (Ctrl+Enter)" aria-live="polite">Copy HTML</button>
       </div>
     </div>
     <div id="${NS}-body"></div>
-    <div id="${NS}-resize"></div>
+    <div id="${NS}-resize" role="separator" tabindex="0" title="Resize (arrow keys)" aria-label="Resize preview" aria-orientation="horizontal"></div>
   `;
   box.style.width = DEFAULTS.width + 'px';
   box.style.height = DEFAULTS.height + 'px';
@@ -353,6 +338,7 @@
     if (md && typeof md.parse === 'function') {
       try {
         body.innerHTML = safeHtml(md.parse(text || ''));
+        lastSourceText = text || '';
         if (copyBtn) { copyBtn.textContent = 'Copy HTML'; copyBtn.title = 'Copy rendered HTML'; }
         if (titleEl) titleEl.textContent = 'Markdown Preview';
       } catch (e) {
@@ -382,6 +368,7 @@
     body.innerHTML = '<pre id="' + NS + '-source" style="white-space:pre-wrap;word-wrap:break-word;margin:0;font-family:Consolas,Menlo,monospace;font-size:inherit;padding:inherit;color:inherit;background:none;"></pre>';
     var pre = body.querySelector('#' + NS + '-source');
     pre.textContent = mdText;
+    lastSourceText = mdText;
     if (titleEl) titleEl.textContent = 'Markdown Source';
     if (copyBtn) { copyBtn.textContent = 'Copy MD'; copyBtn.title = 'Copy Markdown source'; }
   }
@@ -405,12 +392,14 @@
     });
   });
 
-  // Open in Chrome side panel
+  // Open in Chrome side panel — send the original source (markdown), not the
+  // rendered HTML, so the panel doesn't show literal tags as markdown text.
   sidepanelBtn.addEventListener('click', function () {
-    var text = '';
-    var pre = body.querySelector('pre#' + NS + '-source');
-    if (pre) { text = pre.textContent; }
-    else { text = body.innerHTML; }
+    var text = lastSourceText;
+    if (!text) {
+      var pre = body.querySelector('pre#' + NS + '-source');
+      text = pre ? pre.textContent : '';
+    }
     try {
       chrome.runtime.sendMessage({ action: 'openSidePanel', text: text });
       closeBox();
@@ -466,10 +455,12 @@
     saveConfig();
   });
 
-  // Drag-to-move
+  // Drag-to-move (Pointer Events: mouse + touch; capture keeps the drag alive
+  // outside the bar, no document-level listeners to leak on re-injection).
   const bar = box.querySelector('#' + NS + '-bar');
   let dragging = false, offX = 0, offY = 0;
-  bar.addEventListener('mousedown', function (e) {
+  bar.style.touchAction = 'none';
+  bar.addEventListener('pointerdown', function (e) {
     if (e.target.closest('#' + NS + '-bar-btns') || e.target.closest('#' + NS + '-traffic')) return;
     dragging = true;
     const rect = box.getBoundingClientRect();
@@ -478,35 +469,60 @@
     box.style.right = 'auto';
     box.style.left = rect.left + 'px';
     box.style.top = rect.top + 'px';
+    try { bar.setPointerCapture(e.pointerId); } catch (err) {}
   });
-  document.addEventListener('mousemove', function (e) {
+  bar.addEventListener('pointermove', function (e) {
     if (!dragging) return;
     box.style.left = (e.clientX - offX) + 'px';
     box.style.top = (e.clientY - offY) + 'px';
   });
-  document.addEventListener('mouseup', function () { dragging = false; });
+  bar.addEventListener('pointerup', function () { dragging = false; });
+  bar.addEventListener('pointercancel', function () { dragging = false; });
 
-  // Drag-to-resize (bottom-right corner)
+  // Drag-to-resize (bottom-right corner, 24px hit area, touch-friendly).
   let resizing = false, rsx = 0, rsy = 0, rsw = 0, rsh = 0;
-  resizeHandle.addEventListener('mousedown', function (e) {
+  resizeHandle.style.touchAction = 'none';
+  resizeHandle.addEventListener('pointerdown', function (e) {
     e.preventDefault();
     e.stopPropagation();
     resizing = true;
     rsx = e.clientX; rsy = e.clientY;
     rsw = box.offsetWidth; rsh = box.offsetHeight;
+    try { resizeHandle.setPointerCapture(e.pointerId); } catch (err) {}
   });
-  document.addEventListener('mousemove', function (e) {
+  resizeHandle.addEventListener('pointermove', function (e) {
     if (!resizing) return;
     var nw = Math.max(280, rsw + (e.clientX - rsx));
     var nh = Math.max(160, rsh + (e.clientY - rsy));
     box.style.width = nw + 'px';
     box.style.height = nh + 'px';
   });
-  document.addEventListener('mouseup', function () {
+  function endResize() {
     if (resizing) {
       resizing = false;
       config.width = box.offsetWidth;
       config.height = box.offsetHeight;
+      saveConfig();
+    }
+  }
+  resizeHandle.addEventListener('pointerup', endResize);
+  resizeHandle.addEventListener('pointercancel', function () { resizing = false; });
+
+  // Keyboard resize: arrows grow/shrink by 16px (Shift: 48px).
+  resizeHandle.addEventListener('keydown', function (e) {
+    var step = e.shiftKey ? 48 : 16;
+    var w = box.offsetWidth, h = box.offsetHeight, used = true;
+    if (e.key === 'ArrowRight') w += step;
+    else if (e.key === 'ArrowLeft') w = Math.max(280, w - step);
+    else if (e.key === 'ArrowDown') h += step;
+    else if (e.key === 'ArrowUp') h = Math.max(160, h - step);
+    else used = false;
+    if (used) {
+      e.preventDefault();
+      box.style.width = w + 'px';
+      box.style.height = h + 'px';
+      config.width = w;
+      config.height = h;
       saveConfig();
     }
   });
@@ -533,22 +549,6 @@
     boxEl.style.top = top + 'px';
   }
 
-  function loadPending() {
-    try {
-      chrome.storage.session.get(['pendingMarkdown', 'pendingHtml'], function (res) {
-        if (res && res.pendingHtml) {
-          renderMarkdownSource(htmlToMarkdown(res.pendingHtml));
-          chrome.storage.session.remove('pendingHtml');
-        } else if (res && res.pendingMarkdown) {
-          render(res.pendingMarkdown);
-          chrome.storage.session.remove('pendingMarkdown');
-        }
-      });
-    } catch (e) {
-      console.error('[MD] loadPending failed:', e);
-    }
-  }
-
   if (chrome.runtime && chrome.runtime.onMessage) {
     chrome.runtime.onMessage.addListener(function (msg) {
       if (msg && msg.action === 'renderMarkdown') {
@@ -570,6 +570,5 @@
   loadConfig(function () {
     applyConfig();
     render('');
-    loadPending();
   });
 })();
