@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MarkLens — Instant Markdown Renderer & Page Converter",
-  "version": "1.0.3",
+  "version": "1.0.0",
   "description": "Select Markdown text on any page — see a live rendered preview floating on the page. Or open the side panel to write your own.",
   "minimum_chrome_version": "116",
   "permissions": ["sidePanel", "contextMenus", "storage", "scripting", "activeTab"],

@@ -64,7 +64,7 @@ No build step, bundler, or package manager — all source is plain JS/HTML/CSS l
 
 ## Version
 
-**1.0.3** — current release (see `manifest.json` `version`; popup and options pages read it at runtime).
+**1.0.0** — initial release (see `manifest.json` `version`; popup and options pages read it at runtime).
 
 ## License
 
