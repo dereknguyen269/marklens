@@ -85,7 +85,12 @@ chrome.contextMenus.onClicked.addListener(function (info, tab) {
         });
       }
 
-      stashForSidePanel(isHtmlToMd, selected, selected);
+      // NOTE: info.selectionText has newlines replaced with spaces
+      // (Chromium bug 40740672), which breaks tables/code blocks. Prefer
+      // the live selection (preserves line breaks) and only fall back to
+      // selectionText when the live read fails. The panel picks the
+      // stashed value up via storage.onChanged even though it arrives
+      // after open().
       if (tab && tab.id != null) {
         chrome.scripting.executeScript({
           target: { tabId: tab.id },
@@ -100,9 +105,13 @@ chrome.contextMenus.onClicked.addListener(function (info, tab) {
         }).then(function (results) {
           var liveSel = results && results[0] && results[0].result;
           if (liveSel && liveSel.text) stashForSidePanel(isHtmlToMd, liveSel.text, liveSel.html || liveSel.text);
+          else if (selected) stashForSidePanel(isHtmlToMd, selected, selected);
         }).catch(function (err) {
           console.warn('[MD] executeScript failed:', err.message);
+          if (selected) stashForSidePanel(isHtmlToMd, selected, selected);
         });
+      } else if (selected) {
+        stashForSidePanel(isHtmlToMd, selected, selected);
       }
     } else {
       // Popup mode: inject floating preview into the page (only the libs on first use).

@@ -10,6 +10,10 @@
       : html;
   }
 
+  function hasHtmlTags(s) {
+    return /<\/?[a-zA-Z][^<>]*>/.test(s || '');
+  }
+
   // Box already exists: the message + key listeners from the first injection
   // are still active (same page, same DOM). Return without re-registering
   // anything — stacking another onMessage/document listener per right-click
@@ -206,7 +210,21 @@
       #${NS}-body input[type=checkbox]{vertical-align:middle;}
       #${NS}-body .footnotes{margin-top:2em;font-size:.9em;color:var(--md-footnote-color,#656d76);border-top:1px solid var(--md-footnote-border,#e3e6ea);padding-top:.6em;}
       #${NS}-body .footnotes .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0;}
-      #${NS}-body sup a[data-footnote-ref]{font-size:.75em;vertical-align:super;}
+      #${NS}-body .footnotes li:target{background:color-mix(in srgb, var(--md-link,#007aff) 10%, transparent);border-radius:6px;}
+      #${NS}-body sup a[data-footnote-ref]{
+        display:inline-block;min-width:1.5em;box-sizing:border-box;text-align:center;
+        font-size:.72em;font-weight:700;line-height:1.6;vertical-align:super;
+        color:var(--md-link,#007aff);background:color-mix(in srgb, var(--md-link,#007aff) 14%, transparent);
+        border-radius:999px;padding:0 .4em;text-decoration:none;
+      }
+      #${NS}-body sup a[data-footnote-ref]:hover{background:color-mix(in srgb, var(--md-link,#007aff) 26%, transparent);text-decoration:none;}
+      #${NS}-body a[data-footnote-backref]{
+        display:inline-block;margin-left:.4em;padding:0 .45em;
+        font-size:.8em;font-weight:700;line-height:1.6;border-radius:999px;
+        color:var(--md-link,#007aff);background:color-mix(in srgb, var(--md-link,#007aff) 14%, transparent);
+        text-decoration:none;
+      }
+      #${NS}-body a[data-footnote-backref]:hover{background:color-mix(in srgb, var(--md-link,#007aff) 26%, transparent);text-decoration:none;}
       #${NS}-body dl{margin:.6em 0;padding-left:1em;}
       #${NS}-body dt{font-weight:600;margin-top:.4em;}
       #${NS}-body dd{margin:.2em 0 .2em 1.4em;}
@@ -347,7 +365,20 @@
     var md = globalThis.marked;
     if (md && typeof md.parse === 'function') {
       try {
-        body.innerHTML = safeHtml(md.parse(text || ''));
+        var html = md.parse(text || '');
+        // Flattened selections (Chrome strips newlines in selectionText)
+        // render tables as paragraphs — adopt the reflowed source only
+        // when it parses to more <table>s than the original.
+        if (globalThis.reflowFlattenedTable) {
+          var fixed = globalThis.reflowFlattenedTable(text || '');
+          if (fixed !== (text || '')) {
+            var html2 = md.parse(fixed);
+            var n1 = (html.match(/<table[\s>]/g) || []).length;
+            var n2 = (html2.match(/<table[\s>]/g) || []).length;
+            if (n2 > n1) { html = html2; text = fixed; }
+          }
+        }
+        body.innerHTML = safeHtml(html);
         lastSourceText = text || '';
         if (copyBtn) { copyBtn.textContent = 'Copy HTML'; copyBtn.title = 'Copy rendered HTML'; }
         if (titleEl) titleEl.textContent = 'Markdown Preview';
@@ -368,10 +399,23 @@
   function htmlToMarkdown(html) {
     var TS = globalThis.TurndownService;
     if (!TS) return 'ERROR: TurndownService not loaded.';
+    var src = String(html || '');
+    // No HTML markup: nothing to convert. Return as-is so Markdown
+    // tables/fences keep their line breaks (Turndown would collapse
+    // plain-text newlines into spaces, flattening tables to one line).
+    if (!hasHtmlTags(src)) {
+      return src.replace(/\n{3,}/g, '\n\n').trim();
+    }
     var ts = new TS({ headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-' });
     if (globalThis.turndownPluginGfm) ts.use(globalThis.turndownPluginGfm.gfm);
-    var md = ts.turndown(html || '');
-    return md.replace(/\n{3,}/g, '\n\n').trim();
+    var md = ts.turndown(src).replace(/\n{3,}/g, '\n\n').trim();
+    // Safety net: a text-heavy selection can still lose its row breaks;
+    // restore them when the output holds a flattened table.
+    if (globalThis.reflowFlattenedTable) {
+      var fixed = globalThis.reflowFlattenedTable(md);
+      if (fixed !== md) md = fixed;
+    }
+    return md;
   }
 
   function renderMarkdownSource(mdText) {
@@ -568,8 +612,14 @@
       }
       if (msg && msg.action === 'convertHtmlToMarkdown') {
         if (msg.html) {
-          var md = htmlToMarkdown(msg.html);
-          renderMarkdownSource(md);
+          // Tag-less selection (Markdown source, not HTML) — render it
+          // instead of echoing flattened source back.
+          if (msg.html.trim() && !hasHtmlTags(msg.html)) {
+            render(msg.html);
+          } else {
+            var md = htmlToMarkdown(msg.html);
+            renderMarkdownSource(md);
+          }
         }
         positionBox(box, msg.rect || null);
         box.style.display = 'flex';

@@ -193,10 +193,25 @@ function updateCounts(src) {
   countsEl.textContent = words + (words === 1 ? ' word' : ' words') + ' · ' + text.length + ' chars';
 }
 
+function hasHtmlTags(s) {
+  return /<\/?[a-zA-Z][^<>]*>/.test(s || '');
+}
+
 function renderNow() {
   var src = getText();
   updateCounts(src);
+  // Auto-detect: HTML mode holding tag-less (Markdown) content renders as
+  // Markdown — Turndown could only echo it back flattened. The toggle keeps
+  // the user's explicit choice; this only picks the renderer per content.
+  if (inputMode === 'html' && src.trim() && !hasHtmlTags(src)) {
+    renderMarkdown(src);
+    return;
+  }
   if (inputMode === 'html') { convertHtmlToMd(src); return; }
+  renderMarkdown(src);
+}
+
+function renderMarkdown(src) {
   if (!globalThis.marked || typeof globalThis.marked.parse !== 'function') {
     if (status) { status.textContent = 'Renderer missing'; status.classList.add('error'); }
     if (preview) preview.innerHTML = '<p style="color:#c00">marked not loaded — reload the extension.</p>';
@@ -204,7 +219,20 @@ function renderNow() {
     return;
   }
   try {
-    preview.innerHTML = safeHtml(globalThis.marked.parse(src));
+    var html = globalThis.marked.parse(src);
+    // Flattened selections (Chrome strips newlines in selectionText)
+    // render tables as paragraphs — adopt the reflowed source only
+    // when it parses to more <table>s than the original.
+    if (globalThis.reflowFlattenedTable) {
+      var fixed = globalThis.reflowFlattenedTable(src);
+      if (fixed !== src) {
+        var html2 = globalThis.marked.parse(fixed);
+        var n1 = (html.match(/<table[\s>]/g) || []).length;
+        var n2 = (html2.match(/<table[\s>]/g) || []).length;
+        if (n2 > n1) html = html2;
+      }
+    }
+    preview.innerHTML = safeHtml(html);
     if (status) { status.textContent = 'Live'; status.classList.remove('error'); }
     copyBtn.textContent = 'Copy HTML';
     copyBtn.title = 'Copy rendered HTML (Ctrl+Enter / Ctrl+S)';
@@ -253,9 +281,24 @@ function htmlToMarkdown(html) {
   var TS = globalThis.TurndownService;
   if (!TS) return null;
   try {
+    var src = String(html || '');
+    // No HTML markup: nothing to convert. Return as-is so Markdown
+    // tables/fences keep their line breaks (Turndown follows HTML
+    // whitespace rules and would collapse plain-text newlines into
+    // spaces, flattening tables to one line).
+    if (!hasHtmlTags(src)) {
+      return src.replace(/\n{3,}/g, '\n\n').trim();
+    }
     var ts = new TS({ headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-' });
     if (globalThis.turndownPluginGfm) ts.use(globalThis.turndownPluginGfm.gfm);
-    return ts.turndown(html || '').replace(/\n{3,}/g, '\n\n').trim();
+    var md = ts.turndown(src).replace(/\n{3,}/g, '\n\n').trim();
+    // Safety net: a text-heavy selection can still lose its row breaks;
+    // restore them when the output holds a flattened table.
+    if (globalThis.reflowFlattenedTable) {
+      var fixed = globalThis.reflowFlattenedTable(md);
+      if (fixed !== md) md = fixed;
+    }
+    return md;
   } catch (e) {
     console.error('[MD] convert error:', e);
     return null;
