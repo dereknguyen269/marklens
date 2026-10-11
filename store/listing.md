@@ -64,4 +64,4 @@ No data is collected, transmitted, or shared. Selections are rendered locally an
 ## URLs
 - Homepage: https://github.com/dereknguyen269/marklens
 - Support: https://github.com/dereknguyen269/marklens/issues
-- Privacy policy: publish PRIVACY.md in the repo (still TODO) and link it
+- Privacy policy: https://github.com/dereknguyen269/marklens/blob/master/PRIVACY.md
