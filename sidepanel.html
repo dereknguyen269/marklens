@@ -107,6 +107,17 @@
       <input id="docs-search" class="docs-search" type="search" placeholder="Search documents..." aria-label="Search documents">
       <ul id="docs-list" class="docs-list"></ul>
     </aside>
+    <aside id="snaps-panel" class="docs-panel" hidden>
+      <div class="docs-head">
+        <strong>Snapshots</strong>
+        <div class="docs-head-actions">
+          <button id="snaps-new-btn" title="New snapshot" aria-label="New snapshot">+</button>
+          <button id="snaps-close-btn" title="Close snapshots" aria-label="Close snapshots">✕</button>
+        </div>
+      </div>
+      <div id="snaps-doc-title" class="docs-empty" style="padding:6px 10px;text-align:left;"></div>
+      <ul id="snaps-list" class="docs-list"></ul>
+    </aside>
     <section class="pane editor-pane">
       <textarea id="editor" spellcheck="false" placeholder="# Write or paste Markdown here…
 
@@ -125,6 +136,7 @@ Select text on a page → right-click → “Preview as Markdown”"></textarea>
     </div>
     <div class="status-actions">
       <button id="docs-btn" title="Document library" aria-live="polite">Docs</button>
+      <button id="snaps-btn" title="Version snapshots" aria-live="polite">Snaps</button>
       <button id="dl-md-btn" title="Download as Markdown file" aria-live="polite">↓ MD</button>
       <button id="dl-html-btn" title="Download as styled HTML file" aria-live="polite">↓ HTML</button>
       <button id="print-btn" title="Print or save as PDF" aria-live="polite">PDF</button>
@@ -132,6 +144,17 @@ Select text on a page → right-click → “Preview as Markdown”"></textarea>
       <button id="copy-btn" title="Copy rendered HTML (Ctrl+Enter / Ctrl+S)" aria-live="polite">Copy</button>
     </div>
   </footer>
+
+  <div id="diff-modal" class="diff-modal" hidden>
+    <div class="diff-card">
+      <div class="diff-head">
+        <strong id="diff-title">Diff</strong>
+        <button id="diff-close" title="Close" aria-label="Close">✕</button>
+      </div>
+      <div id="diff-meta" class="diff-meta"></div>
+      <div id="diff-body" class="diff-body"></div>
+    </div>
+  </div>
 
   <script src="vendor/marked.min.js"></script>
   <script src="vendor/marked-footnote.umd.js"></script>

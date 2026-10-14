@@ -356,6 +356,206 @@ function renderDocList() {
       list.appendChild(li);
     });
   });
+  if (typeof renderSnapList === 'function') renderSnapList();
+}
+
+// Snapshots (Phase 2)
+var SNAPSHOT_MAX = 50;
+
+function getSnapshotsForDoc(docId, cb) {
+  if (!docId || !globalThis.mdDB) { if (cb) cb([]); return; }
+  globalThis.mdDB.all('snapshots', function (items) {
+    var out = (items || []).filter(function (s) { return s.docId === docId; });
+    out.sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); });
+    if (cb) cb(out);
+  });
+}
+
+function pruneSnapshots(docId, cb) {
+  getSnapshotsForDoc(docId, function (items) {
+    if (items.length <= SNAPSHOT_MAX) { if (cb) cb(); return; }
+    var extra = items.slice(SNAPSHOT_MAX);
+    var left = extra.length;
+    extra.forEach(function (s) {
+      globalThis.mdDB.del('snapshots', s.id, function () {
+        left -= 1;
+        if (left <= 0 && cb) cb();
+      });
+    });
+  });
+}
+
+function createSnapshot(label, cb) {
+  if (!currentDocId || !globalThis.mdDB) { if (cb) cb(null); return; }
+  saveCurrentDoc(true);
+  var snap = {
+    id: uid(),
+    docId: currentDocId,
+    label: (label && String(label).trim()) ? String(label).trim() : ('Snapshot ' + new Date().toLocaleString()),
+    content: getText(),
+    inputMode: inputMode,
+    createdAt: Date.now()
+  };
+  globalThis.mdDB.put('snapshots', snap, function (ok) {
+    if (ok) pruneSnapshots(currentDocId);
+    renderSnapList();
+    if (cb) cb(ok ? snap : null);
+  });
+}
+
+function deleteSnapshot(id, cb) {
+  if (!id || !globalThis.mdDB) return;
+  globalThis.mdDB.del('snapshots', id, function () {
+    renderSnapList();
+    if (cb) cb();
+  });
+}
+
+function restoreSnapshot(snap) {
+  if (!snap) return;
+  if (!confirm('Restore this snapshot? Unsaved changes will be overwritten.')) return;
+  setText(snap.content || '');
+  setInputMode(snap.inputMode === 'html' ? 'html' : 'md', true);
+  renderNow();
+  saveCurrentDoc(true);
+  if (status) { status.textContent = 'Restored snapshot'; status.classList.remove('error'); }
+}
+
+function diffLines(oldText, newText) {
+  var a = String(oldText == null ? '' : oldText).split('\n');
+  var b = String(newText == null ? '' : newText).split('\n');
+  var n = a.length, m = b.length;
+  var dp = new Array(n + 1);
+  for (var i = 0; i <= n; i++) {
+    dp[i] = new Array(m + 1);
+    dp[i][0] = 0;
+  }
+  for (var j = 0; j <= m; j++) dp[0][j] = 0;
+  for (i = 1; i <= n; i++) {
+    for (j = 1; j <= m; j++) {
+      if (a[i - 1] === b[j - 1]) dp[i][j] = dp[i - 1][j - 1] + 1;
+      else dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+    }
+  }
+  var ops = [];
+  i = n; j = m;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && a[i - 1] === b[j - 1]) {
+      ops.unshift({ t: 'eq', text: a[i - 1] });
+      i--; j--;
+    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+      ops.unshift({ t: 'add', text: b[j - 1] });
+      j--;
+    } else {
+      ops.unshift({ t: 'del', text: a[i - 1] });
+      i--;
+    }
+  }
+  return ops;
+}
+
+function showDiff(snap) {
+  if (!snap || !document.getElementById('diff-modal')) return;
+  var ops = diffLines(snap.content || '', getText());
+  var added = 0, removed = 0;
+  ops.forEach(function (o) {
+    if (o.t === 'add') added++;
+    else if (o.t === 'del') removed++;
+  });
+  var meta = document.getElementById('diff-meta');
+  if (meta) meta.textContent = (snap.label || 'Snapshot') + '  →  current    +' + added + '  -' + removed;
+  var title = document.getElementById('diff-title');
+  if (title) title.textContent = 'Diff: ' + (snap.label || 'Snapshot');
+  var body = document.getElementById('diff-body');
+  if (body) {
+    body.innerHTML = '';
+    ops.forEach(function (o) {
+      var row = document.createElement('div');
+      row.className = 'diff-line ' + (o.t === 'add' ? 'diff-add' : o.t === 'del' ? 'diff-del' : 'diff-eq');
+      var prefix = o.t === 'add' ? '+' : o.t === 'del' ? '-' : ' ';
+      row.textContent = prefix + ' ' + o.text;
+      body.appendChild(row);
+    });
+    if (!ops.length) {
+      var empty = document.createElement('div');
+      empty.className = 'diff-line diff-eq';
+      empty.textContent = '(no differences)';
+      body.appendChild(empty);
+    }
+  }
+  var modal = document.getElementById('diff-modal');
+  if (modal) modal.removeAttribute('hidden');
+}
+
+function hideDiff() {
+  var modal = document.getElementById('diff-modal');
+  if (modal) modal.setAttribute('hidden', '');
+}
+
+function renderSnapList() {
+  var list = document.getElementById('snaps-list');
+  var titleEl = document.getElementById('snaps-doc-title');
+  if (titleEl) titleEl.textContent = currentDocId ? ('Document: ' + currentDocTitle) : 'No document open.';
+  if (!list || !globalThis.mdDB || !currentDocId) {
+    if (list) list.innerHTML = '<li class="docs-empty">Open a document to manage snapshots.</li>';
+    return;
+  }
+  getSnapshotsForDoc(currentDocId, function (snaps) {
+    list.innerHTML = '';
+    if (!snaps.length) {
+      var empty = document.createElement('li');
+      empty.className = 'docs-empty';
+      empty.textContent = 'No snapshots yet. Click + to save one.';
+      list.appendChild(empty);
+      return;
+    }
+    snaps.forEach(function (s) {
+      var li = document.createElement('li');
+      li.className = 'docs-item';
+      var info = document.createElement('div');
+      info.style.flex = '1';
+      info.style.minWidth = '0';
+      var t = document.createElement('div');
+      t.className = 'title';
+      t.textContent = s.label || 'Snapshot';
+      info.appendChild(t);
+      var sub = document.createElement('div');
+      sub.style.fontSize = '11px';
+      sub.style.color = 'var(--text2)';
+      sub.textContent = new Date(s.createdAt || 0).toLocaleString();
+      info.appendChild(sub);
+      li.appendChild(info);
+
+      var act = document.createElement('div');
+      act.style.display = 'flex';
+      act.style.gap = '4px';
+      var diffBtn = document.createElement('button');
+      diffBtn.className = 'del';
+      diffBtn.style.opacity = '1';
+      diffBtn.textContent = 'Diff';
+      diffBtn.title = 'Compare to current';
+      diffBtn.addEventListener('click', function (e) { e.stopPropagation(); showDiff(s); });
+      act.appendChild(diffBtn);
+      var restBtn = document.createElement('button');
+      restBtn.className = 'del';
+      restBtn.style.opacity = '1';
+      restBtn.textContent = 'Restore';
+      restBtn.title = 'Restore snapshot';
+      restBtn.addEventListener('click', function (e) { e.stopPropagation(); restoreSnapshot(s); });
+      act.appendChild(restBtn);
+      var delBtn = document.createElement('button');
+      delBtn.className = 'del';
+      delBtn.textContent = '×';
+      delBtn.title = 'Delete snapshot';
+      delBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (confirm('Delete snapshot "' + (s.label || 'Snapshot') + '"?')) deleteSnapshot(s.id);
+      });
+      act.appendChild(delBtn);
+      li.appendChild(act);
+      list.appendChild(li);
+    });
+  });
 }
 
 function initDocLibrary(cb) {
@@ -627,7 +827,36 @@ var docsPanel = document.getElementById('docs-panel');
 var docsNewBtn = document.getElementById('docs-new-btn');
 var docsCloseBtn = document.getElementById('docs-close-btn');
 var docsSearch = document.getElementById('docs-search');
+var snapsBtn = document.getElementById('snaps-btn');
+var snapsPanel = document.getElementById('snaps-panel');
+var snapsNewBtn = document.getElementById('snaps-new-btn');
+var snapsCloseBtn = document.getElementById('snaps-close-btn');
+var diffCloseBtn = document.getElementById('diff-close');
 
+function setSnapsOpen(on) {
+  if (!snapsPanel) return;
+  if (on) snapsPanel.removeAttribute('hidden');
+  else snapsPanel.setAttribute('hidden', '');
+  if (on) renderSnapList();
+}
+if (snapsBtn) snapsBtn.addEventListener('click', function () {
+  if (!snapsPanel) return;
+  var opening = snapsPanel.hasAttribute('hidden');
+  setSnapsOpen(opening);
+});
+if (snapsCloseBtn) snapsCloseBtn.addEventListener('click', function () { setSnapsOpen(false); });
+if (snapsNewBtn) snapsNewBtn.addEventListener('click', function () {
+  var label = prompt('Snapshot label (optional):', '');
+  createSnapshot(label, function () {
+    setSnapsOpen(true);
+    renderSnapList();
+  });
+});
+if (diffCloseBtn) diffCloseBtn.addEventListener('click', hideDiff);
+var diffModal = document.getElementById('diff-modal');
+if (diffModal) diffModal.addEventListener('click', function (e) {
+  if (e.target === diffModal) hideDiff();
+});
 function setDocsOpen(on) {
   if (!docsPanel) return;
   if (on) docsPanel.removeAttribute('hidden');
@@ -667,6 +896,10 @@ document.addEventListener('keydown', function (e) {
     e.preventDefault();
     setZen(false);
     return;
+  }
+  if (e.key === 'Escape') {
+    var dm = document.getElementById('diff-modal');
+    if (dm && !dm.hasAttribute('hidden')) { e.preventDefault(); hideDiff(); return; }
   }
   if (e.altKey && !mod && (e.key === '1' || e.key === '2' || e.key === '3')) {
     e.preventDefault();
