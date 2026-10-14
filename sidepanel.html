@@ -96,6 +96,17 @@
   </div>
 
   <main id="workspace" class="view-split">
+    <aside id="docs-panel" class="docs-panel" hidden>
+      <div class="docs-head">
+        <strong>Documents</strong>
+        <div class="docs-head-actions">
+          <button id="docs-new-btn" title="New document" aria-label="New document">+</button>
+          <button id="docs-close-btn" title="Close library" aria-label="Close library">✕</button>
+        </div>
+      </div>
+      <input id="docs-search" class="docs-search" type="search" placeholder="Search documents..." aria-label="Search documents">
+      <ul id="docs-list" class="docs-list"></ul>
+    </aside>
     <section class="pane editor-pane">
       <textarea id="editor" spellcheck="false" placeholder="# Write or paste Markdown here…
 
@@ -113,6 +124,7 @@ Select text on a page → right-click → “Preview as Markdown”"></textarea>
       <span id="draft-note" title="Draft autosaves locally in your browser"></span>
     </div>
     <div class="status-actions">
+      <button id="docs-btn" title="Document library" aria-live="polite">Docs</button>
       <button id="dl-md-btn" title="Download as Markdown file" aria-live="polite">↓ MD</button>
       <button id="dl-html-btn" title="Download as styled HTML file" aria-live="polite">↓ HTML</button>
       <button id="print-btn" title="Print or save as PDF" aria-live="polite">PDF</button>
@@ -143,6 +155,7 @@ Select text on a page → right-click → “Preview as Markdown”"></textarea>
   <script src="js/themes.js"></script>
   <script src="js/setupMarked.js"></script>
   <script src="js/storage.js"></script>
-  <script src="js/sidepanel.js"></script>
+  <script src="js/idb.js"></script>
+  <script src="js/sidepanel.js"></script
 </body>
 </html>

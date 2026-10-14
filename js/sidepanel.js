@@ -139,6 +139,286 @@ function initEditor() {
   }
 }
 
+// Document library (Phase 1, offline via IndexedDB).
+// Keeps a primary `marklensDraft` fallback for environments without IDB.
+var currentDocId = null;
+var currentDocTitle = 'Untitled';
+var currentDocCreatedAt = 0;
+var docSaveTimer = null;
+var docsFilter = '';
+
+function appStateKey() { return 'marklensAppState'; }
+function loadAppState(cb) {
+  if (!chrome.storage || !chrome.storage.local) { cb({}); return; }
+  chrome.storage.local.get([appStateKey()], function (res) {
+    cb((res && res[appStateKey()]) || {});
+  });
+}
+function saveAppState() {
+  if (!chrome.storage || !chrome.storage.local) return;
+  var payload = {};
+  payload[appStateKey()] = { activeDocId: currentDocId };
+  chrome.storage.local.set(payload);
+}
+
+function uid() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return 'doc_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+}
+
+function ensureDoc() {
+  if (currentDocId) return;
+  // Create a fresh doc mirroring current editor content.
+  createDoc(currentDocTitle || 'Untitled', getText(), inputMode, function (doc) {
+    // handled in callback; do nothing extra
+  });
+}
+
+function createDoc(title, content, mode, cb) {
+  if (!globalThis.mdDB) { if (cb) cb(null); return; }
+  var now = Date.now();
+  var doc = {
+    id: uid(),
+    title: (title && String(title).trim()) ? String(title).trim() : 'Untitled',
+    content: (content == null ? '' : String(content)),
+    inputMode: mode === 'html' ? 'html' : 'md',
+    folder: '',
+    tags: [],
+    createdAt: now,
+    updatedAt: now
+  };
+  globalThis.mdDB.put('docs', doc, function (ok) {
+    if (ok) {
+      currentDocId = doc.id;
+      currentDocTitle = doc.title;
+      currentDocCreatedAt = doc.createdAt;
+      saveAppState();
+      renderDocList();
+    }
+    if (cb) cb(ok ? doc : null);
+  });
+}
+
+function saveCurrentDoc(immediate) {
+  if (!currentDocId || !globalThis.mdDB) return;
+  if (docSaveTimer) clearTimeout(docSaveTimer);
+  var write = function () {
+    globalThis.mdDB.get('docs', currentDocId, function (existing) {
+      var now = Date.now();
+      var doc = existing || { id: currentDocId, createdAt: currentDocCreatedAt || now };
+      doc.title = currentDocTitle || doc.title || 'Untitled';
+      doc.content = getText();
+      doc.inputMode = inputMode;
+      doc.updatedAt = now;
+      if (!doc.createdAt) doc.createdAt = currentDocCreatedAt || now;
+      globalThis.mdDB.put('docs', doc, function () { /* silent */ });
+    });
+  };
+  if (immediate) write();
+  else docSaveTimer = setTimeout(write, 600);
+}
+
+function openDoc(id) {
+  if (!id || !globalThis.mdDB) return;
+  if (id === currentDocId) return;
+  saveCurrentDoc(true);
+  globalThis.mdDB.get('docs', id, function (doc) {
+    if (!doc) return;
+    currentDocId = doc.id;
+    currentDocTitle = doc.title || 'Untitled';
+    currentDocCreatedAt = doc.createdAt || 0;
+    setText(doc.content || '');
+    setInputMode(doc.inputMode === 'html' ? 'html' : 'md', true);
+    setView(config.view || 'split', true);
+    renderNow();
+    if (status) { status.textContent = 'Opened ' + currentDocTitle; status.classList.remove('error'); }
+    saveAppState();
+    renderDocList();
+  });
+}
+
+function renameDoc(id, newTitle) {
+  if (!id || !globalThis.mdDB) return;
+  var title = (newTitle || '').trim() || 'Untitled';
+  globalThis.mdDB.get('docs', id, function (doc) {
+    if (!doc) return;
+    doc.title = title;
+    doc.updatedAt = Date.now();
+    globalThis.mdDB.put('docs', doc, function () {
+      if (id === currentDocId) currentDocTitle = title;
+      renderDocList();
+    });
+  });
+}
+
+function deleteDoc(id) {
+  if (!id || !globalThis.mdDB) return;
+  if (id === currentDocId) {
+    currentDocId = null;
+    currentDocTitle = 'Untitled';
+    globalThis.mdDB.all('docs', function (docs) {
+      var others = (docs || []).filter(function (d) { return d.id !== id; });
+      globalThis.mdDB.del('docs', id, function () {
+        if (!others.length) {
+          createDoc('Untitled', '', 'md', function (doc) {
+            setText('');
+            setInputMode('md', true);
+            renderNow();
+            renderDocList();
+          });
+        } else {
+          openDoc(others[0].id);
+          renderDocList();
+        }
+      });
+    });
+  } else {
+    globalThis.mdDB.del('docs', id, function () { renderDocList(); });
+  }
+}
+
+function applyPendingToNewDoc(text) {
+  pendingApplied = true;
+  saveCurrentDoc(true);
+  createDoc('From selection', text, 'md', function (doc) {
+    if (!doc) return;
+    currentDocId = doc.id;
+    currentDocTitle = doc.title;
+    currentDocCreatedAt = doc.createdAt;
+    setText(text);
+    setInputMode('md', true);
+    setView('preview', true);
+    renderNow();
+    if (status) { status.textContent = 'From selection'; status.classList.remove('error'); }
+    saveAppState();
+    renderDocList();
+  });
+}
+
+function applyPendingHtmlToNewDoc(html) {
+  pendingApplied = true;
+  saveCurrentDoc(true);
+  createDoc('From HTML selection', html, 'html', function (doc) {
+    if (!doc) return;
+    currentDocId = doc.id;
+    currentDocTitle = doc.title;
+    currentDocCreatedAt = doc.createdAt;
+    setText(html);
+    setInputMode('html', true);
+    setView('split', true);
+    renderNow();
+    if (status) { status.textContent = 'From HTML selection'; status.classList.remove('error'); }
+    saveAppState();
+    renderDocList();
+  });
+}
+
+function renderDocList() {
+  var list = document.getElementById('docs-list');
+  if (!list || !globalThis.mdDB) return;
+  globalThis.mdDB.all('docs', function (docs) {
+    docs = docs || [];
+    docs.sort(function (a, b) { return (b.updatedAt || 0) - (a.updatedAt || 0); });
+    var q = (docsFilter || '').toLowerCase();
+    if (q) docs = docs.filter(function (d) {
+      return (d.title || '').toLowerCase().indexOf(q) !== -1
+        || (d.content || '').toLowerCase().indexOf(q) !== -1;
+    });
+    list.innerHTML = '';
+    if (!docs.length) {
+      var empty = document.createElement('li');
+      empty.className = 'docs-empty';
+      empty.textContent = 'No documents yet. Click + to create one.';
+      list.appendChild(empty);
+      return;
+    }
+    docs.forEach(function (d) {
+      var li = document.createElement('li');
+      li.className = 'docs-item' + (d.id === currentDocId ? ' active' : '');
+      var title = document.createElement('span');
+      title.className = 'title';
+      title.textContent = d.title || 'Untitled';
+      li.appendChild(title);
+      var del = document.createElement('button');
+      del.className = 'del';
+      del.textContent = '×';
+      del.title = 'Delete';
+      del.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (confirm('Delete "' + (d.title || 'Untitled') + '"?')) deleteDoc(d.id);
+      });
+      li.appendChild(del);
+      li.addEventListener('click', function () { openDoc(d.id); });
+      li.addEventListener('dblclick', function () {
+        var nt = prompt('Rename document:', d.title || 'Untitled');
+        if (nt !== null) renameDoc(d.id, nt);
+      });
+      list.appendChild(li);
+    });
+  });
+}
+
+function initDocLibrary(cb) {
+  if (!globalThis.mdDB) { if (cb) cb(); return; }
+  globalThis.mdDB.ready(function (ok) {
+    if (!ok) { if (cb) cb(); return; }
+    globalThis.mdDB.all('docs', function (docs) {
+      docs = docs || [];
+      if (!docs.length) {
+        // migrate from draft
+        restoreDraft(function (draft) {
+          var content = draft && draft.text ? draft.text : '';
+          var mode = (draft && draft.inputMode === 'html') ? 'html' : 'md';
+          createDoc('Untitled', content, mode, function (doc) {
+            if (doc) {
+              currentDocCreatedAt = doc.createdAt || Date.now();
+              setText(content);
+              setInputMode(mode, true);
+            }
+            if (cb) cb();
+          });
+        });
+        return;
+      }
+      loadAppState(function (state) {
+        var pick = (state && state.activeDocId && docs.some(function (d) { return d.id === state.activeDocId; }))
+          ? state.activeDocId : docs.slice().sort(function (a, b) { return (b.updatedAt || 0) - (a.updatedAt || 0); })[0].id;
+        globalThis.mdDB.get('docs', pick, function (doc) {
+          if (doc) {
+            currentDocId = doc.id;
+            currentDocTitle = doc.title || 'Untitled';
+            currentDocCreatedAt = doc.createdAt || 0;
+            setText(doc.content || '');
+            setInputMode(doc.inputMode === 'html' ? 'html' : 'md', true);
+          }
+          if (cb) cb();
+        });
+      });
+    });
+  });
+}
+
+// Save into the document library alongside the legacy draft autosave.
+function saveDraft(immediate) {
+  if (draftTimer) clearTimeout(draftTimer);
+  var write = function () {
+    if (!chrome.storage || !chrome.storage.local) return;
+    var payload = {};
+    payload[DRAFT_KEY] = {
+      text: getText(),
+      inputMode: inputMode,
+      updatedAt: Date.now()
+    };
+    chrome.storage.local.set(payload, function () {
+      if (!chrome.runtime.lastError) flashDraftNote();
+    });
+  };
+  if (immediate) write();
+  else draftTimer = setTimeout(write, 500);
+  // mirror to document library when available
+  if (globalThis.mdDB) saveCurrentDoc(!!immediate);
+}
+
 // Draft autosave — editor text + input mode persist in chrome.storage.local
 // under a separate key (never mixed into mdPreviewConfig). Restored on boot
 // unless a context-menu pending selection takes precedence.
@@ -156,24 +436,6 @@ function flashDraftNote() {
   draftNote.textContent = 'Draft saved ✓';
   if (draftNoteTimer) clearTimeout(draftNoteTimer);
   draftNoteTimer = setTimeout(function () { draftNote.textContent = ''; }, 2000);
-}
-
-function saveDraft(immediate) {
-  if (draftTimer) clearTimeout(draftTimer);
-  var write = function () {
-    if (!chrome.storage || !chrome.storage.local) return;
-    var payload = {};
-    payload[DRAFT_KEY] = {
-      text: getText(),
-      inputMode: inputMode,
-      updatedAt: Date.now()
-    };
-    chrome.storage.local.set(payload, function () {
-      if (!chrome.runtime.lastError) flashDraftNote();
-    });
-  };
-  if (immediate) write();
-  else draftTimer = setTimeout(write, 500);
 }
 
 function restoreDraft(cb) {
@@ -357,6 +619,43 @@ document.querySelectorAll('.tab').forEach(function (t) {
   t.addEventListener('click', function () {
     setView(t.dataset.view);
   });
+});
+
+// Document library UI wiring.
+var docsBtn = document.getElementById('docs-btn');
+var docsPanel = document.getElementById('docs-panel');
+var docsNewBtn = document.getElementById('docs-new-btn');
+var docsCloseBtn = document.getElementById('docs-close-btn');
+var docsSearch = document.getElementById('docs-search');
+
+function setDocsOpen(on) {
+  if (!docsPanel) return;
+  if (on) docsPanel.removeAttribute('hidden');
+  else docsPanel.setAttribute('hidden', '');
+}
+if (docsBtn) docsBtn.addEventListener('click', function () {
+  if (!docsPanel) return;
+  var opening = docsPanel.hasAttribute('hidden');
+  setDocsOpen(opening);
+  if (opening) renderDocList();
+});
+if (docsCloseBtn) docsCloseBtn.addEventListener('click', function () { setDocsOpen(false); });
+if (docsNewBtn) docsNewBtn.addEventListener('click', function () {
+  saveCurrentDoc(true);
+  createDoc('Untitled', '', inputMode, function (doc) {
+    if (!doc) return;
+    setText('');
+    setView(config.view || 'split', true);
+    renderNow();
+    saveDraft(true);
+    focusEditor();
+    setDocsOpen(true);
+    renderDocList();
+  });
+});
+if (docsSearch) docsSearch.addEventListener('input', function () {
+  docsFilter = this.value || '';
+  renderDocList();
 });
 
 // Keyboard: Alt+1/2/3 switch views, Alt+Z toggles zen, Esc exits zen,
@@ -641,25 +940,14 @@ function clearPending() {
   chrome.storage.session.remove(['pendingMarkdown', 'pendingHtml']);
 }
 
-// First load: read any pending selection.
-chrome.storage.session.get(['pendingMarkdown', 'pendingHtml'], function (res) {
-  if (res && res.pendingHtml) {
-    applyPendingHtml(res.pendingHtml);
-    clearPending();
-  } else if (res && res.pendingMarkdown) {
-    applyPending(res.pendingMarkdown);
-    clearPending();
-  }
-});
-
 // Already-open panel: react when a new selection arrives via context menu.
 chrome.storage.onChanged.addListener(function (changes, area) {
   if (area !== 'session') return;
   if (changes.pendingHtml && changes.pendingHtml.newValue) {
-    applyPendingHtml(changes.pendingHtml.newValue);
+    applyPendingHtmlToNewDoc(changes.pendingHtml.newValue);
     clearPending();
   } else if (changes.pendingMarkdown && changes.pendingMarkdown.newValue) {
-    applyPending(changes.pendingMarkdown.newValue);
+    applyPendingToNewDoc(changes.pendingMarkdown.newValue);
     clearPending();
   }
 });
@@ -671,7 +959,7 @@ chrome.storage.onChanged.addListener(function (changes, area) {
 loadConfig(function () {
   // Startup self-check: name any vendored global that failed to load so a
   // broken install shows a precise diagnosis instead of a blank preview.
-  var need = ['marked', 'TurndownService', 'DOMPurify', 'MD_SIDEPANEL_THEMES', 'setupMarked', 'mdStorage', 'CodeMirror'];
+  var need = ['marked', 'TurndownService', 'DOMPurify', 'MD_SIDEPANEL_THEMES', 'setupMarked', 'mdStorage', 'CodeMirror', 'mdDB'];
   var missing = need.filter(function (k) { return !globalThis[k]; });
   if (missing.length && status) {
     status.textContent = 'Startup: missing ' + missing.join(', ');
@@ -680,19 +968,41 @@ loadConfig(function () {
   }
   applyConfig();
   initEditor();
-  if (pendingApplied) { renderNow(); return; }
-  restoreDraft(function (draft) {
-    if (pendingApplied) { renderNow(); return; }
-    if (draft && draft.text) {
-      setText(draft.text);
-      setInputMode(draft.inputMode === 'html' ? 'html' : 'md', true);
-      setView(config.view || 'split', true);
-      renderNow();
-      if (status) { status.textContent = 'Draft restored'; status.classList.remove('error'); }
-    } else {
-      setView(config.view || 'split', true);
-      setInputMode(config.inputMode || 'md', true);
-      renderNow();
+
+  // Pending context-menu selection takes precedence.
+  chrome.storage.session.get(['pendingMarkdown', 'pendingHtml'], function (res) {
+    if (res && res.pendingHtml) {
+      applyPendingHtmlToNewDoc(res.pendingHtml);
+      clearPending();
+      return;
     }
+    if (res && res.pendingMarkdown) {
+      applyPendingToNewDoc(res.pendingMarkdown);
+      clearPending();
+      return;
+    }
+    // Normal boot: restore document library (migrating the legacy draft on
+    // first run), or fall back to the old draft path when IDB is unavailable.
+    initDocLibrary(function () {
+      if (currentDocId) {
+        renderNow();
+        if (status) { status.textContent = 'Document restored'; status.classList.remove('error'); }
+      } else {
+        restoreDraft(function (draft) {
+          if (draft && draft.text) {
+            setText(draft.text);
+            setInputMode(draft.inputMode === 'html' ? 'html' : 'md', true);
+            setView(config.view || 'split', true);
+            renderNow();
+            if (status) { status.textContent = 'Draft restored'; status.classList.remove('error'); }
+          } else {
+            setView(config.view || 'split', true);
+            setInputMode(config.inputMode || 'md', true);
+            renderNow();
+          }
+        });
+      }
+      renderDocList();
+    });
   });
 });
