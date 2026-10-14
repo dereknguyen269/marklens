@@ -171,6 +171,28 @@
       </div>
       <ul id="themes-list" class="docs-list"></ul>
     </aside>
+    <aside id="lint-panel" class="docs-panel" hidden>
+      <div class="docs-head">
+        <strong>Lint</strong>
+        <div class="docs-head-actions">
+          <button id="lint-run-btn" title="Re-run lint" aria-label="Re-run">↻</button>
+          <button id="lint-close-btn" title="Close" aria-label="Close">✕</button>
+        </div>
+      </div>
+      <ul id="lint-list" class="docs-list"></ul>
+    </aside>
+    <aside id="templates-panel" class="docs-panel" hidden>
+      <div class="docs-head">
+        <strong>Templates & Snippets</strong>
+        <div class="docs-head-actions">
+          <button id="templates-close-btn" title="Close" aria-label="Close">✕</button>
+        </div>
+      </div>
+      <div style="padding:6px 10px;font-size:11px;color:var(--text2);border-bottom:1px solid var(--border);">Templates</div>
+      <ul id="templates-list" class="docs-list"></ul>
+      <div style="padding:6px 10px;font-size:11px;color:var(--text2);border-bottom:1px solid var(--border);border-top:1px solid var(--border);">Snippets (insert at cursor)</div>
+      <ul id="snippets-list" class="docs-list"></ul>
+    </aside>
     <section class="pane editor-pane">
       <textarea id="editor" spellcheck="false" placeholder="# Write or paste Markdown here…
 
@@ -192,13 +214,28 @@ Select text on a page → right-click → “Preview as Markdown”"></textarea>
       <button id="snaps-btn" title="Version snapshots" aria-live="polite">Snaps</button>
       <button id="outline-btn" title="Outline and table of contents" aria-live="polite">Outline</button>
       <button id="themes-btn" title="Custom themes" aria-live="polite">Themes</button>
+      <button id="lint-btn" title="Markdown lint" aria-live="polite">Lint</button>
+      <button id="templates-btn" title="Templates and snippets" aria-live="polite">Templates</button>
       <button id="dl-md-btn" title="Download as Markdown file" aria-live="polite">↓ MD</button>
       <button id="dl-html-btn" title="Download as styled HTML file" aria-live="polite">↓ HTML</button>
       <button id="print-btn" title="Print or save as PDF" aria-live="polite">PDF</button>
       <button id="clear-btn" title="Clear editor and preview" aria-live="polite">Clear</button>
       <button id="copy-btn" title="Copy rendered HTML (Ctrl+Enter / Ctrl+S)" aria-live="polite">Copy</button>
+      <button id="copy-rich-btn" title="Copy rendered HTML to clipboard" aria-live="polite">Rich</button>
+      <button id="dl-sel-btn" title="Download selected text (or whole doc)" aria-live="polite">Sel</button>
     </div>
   </footer>
+
+  <div id="cmd-modal" class="diff-modal" hidden>
+    <div class="diff-card" style="max-width:520px;">
+      <div class="diff-head">
+        <strong>Command palette</strong>
+        <button id="cmd-close" title="Close" aria-label="Close">✕</button>
+      </div>
+      <input id="cmd-input" class="docs-search" style="margin:10px;" type="text" placeholder="Type a command..." aria-label="Command">
+      <ul id="cmd-list" class="docs-list"></ul>
+    </div>
+  </div>
 
   <div id="diff-modal" class="diff-modal" hidden>
     <div class="diff-card">

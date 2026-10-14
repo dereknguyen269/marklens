@@ -133,6 +133,7 @@ function initEditor() {
         scrollSyncing = false;
       });
     }
+    setupSnippetExpansion();
   } catch (e) {
     console.error('[MD] CodeMirror init failed — using textarea:', e);
     cm = null;
@@ -891,6 +892,381 @@ function setThemesOpen(on) {
   }
 }
 
+// Markdown lint (Phase 7)
+var lintBtn = null;
+var lintPanel = null;
+
+function runLint(src) {
+  var text = String(src == null ? '' : src);
+  var lines = text.split('\n');
+  var issues = [];
+  var h1Count = 0;
+  var prevHeading = 0;
+  var blankRun = 0;
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i];
+    var ln = i + 1;
+    // trailing whitespace
+    if (/[ \t]+$/.test(line)) {
+      issues.push({ line: ln, severity: 'warning', msg: 'Trailing whitespace' });
+    }
+    // long line
+    if (line.length > 120 && !/^https?:/.test(line.trim())) {
+      issues.push({ line: ln, severity: 'info', msg: 'Line exceeds 120 characters (' + line.length + ')' });
+    }
+    // heading checks
+    var hm = line.match(/^(#{1,6})\s+(.*)$/);
+    if (hm) {
+      var level = hm[1].length;
+      if (level === 1) h1Count++;
+      if (prevHeading !== 0 && level - prevHeading > 1) {
+        issues.push({ line: ln, severity: 'warning', msg: 'Heading level skipped (H' + prevHeading + ' → H' + level + ')' });
+      }
+      prevHeading = level;
+      if (/^#+\s*$/.test(line) || !hm[2].trim()) {
+        issues.push({ line: ln, severity: 'warning', msg: 'Empty heading' });
+      }
+    } else {
+      // only track prevHeading reset at blank? keep last heading
+    }
+    // blank runs
+    if (line.trim() === '') {
+      blankRun++;
+      if (blankRun > 2) issues.push({ line: ln, severity: 'info', msg: 'Too many consecutive blank lines' });
+    } else {
+      blankRun = 0;
+    }
+    // images without alt
+    if (/!\[\s*\]\(/.test(line)) {
+      issues.push({ line: ln, severity: 'warning', msg: 'Image missing alt text' });
+    }
+    // links with empty text or url
+    if (/\[\s*\]\([^)]*\)/.test(line) || /\[[^\]]*\]\(\s*\)/.test(line)) {
+      issues.push({ line: ln, severity: 'warning', msg: 'Empty link text or URL' });
+    }
+    // bare URLs (not in link)
+    var bare = line.match(/(?<!\()https?:\/\/[^\s)]+/g);
+    if (bare) {
+      // ensure not already inside markdown link syntax
+      bare.forEach(function () {
+        // simple heuristic: if line contains '](http' treat as linked
+      });
+      if (!/\]\(https?:/.test(line)) {
+        issues.push({ line: ln, severity: 'info', msg: 'Bare URL (consider linking)' });
+      }
+    }
+    // tabs
+    if (/^\t/.test(line)) {
+      issues.push({ line: ln, severity: 'info', msg: 'Tab indentation (use spaces)' });
+    }
+  }
+  if (h1Count > 1) {
+    // add issue at first h1? We'll add a summary at first h1 line by scanning.
+    var firstH1 = 0;
+    for (var k = 0; k < lines.length; k++) {
+      if (/^#\s/.test(lines[k])) { firstH1 = k + 1; break; }
+    }
+    issues.push({ line: firstH1 || 1, severity: 'warning', msg: 'Multiple top-level headings (' + h1Count + ')' });
+  }
+  // Deduplicate identical line+msg
+  var seen = {};
+  var deduped = [];
+  issues.forEach(function (iss) {
+    var key = iss.line + '|' + iss.msg;
+    if (seen[key]) return;
+    seen[key] = true;
+    deduped.push(iss);
+  });
+  deduped.sort(function (a, b) { return a.line - b.line || a.msg.localeCompare(b.msg); });
+  return deduped;
+}
+
+function renderLintList() {
+  var list = document.getElementById('lint-list');
+  if (!list) return;
+  list.innerHTML = '';
+  var issues = runLint(getText());
+  if (!issues.length) {
+    var empty = document.createElement('li');
+    empty.className = 'docs-empty';
+    empty.textContent = 'No lint issues found ✓';
+    list.appendChild(empty);
+    return;
+  }
+  issues.forEach(function (iss) {
+    var li = document.createElement('li');
+    li.className = 'docs-item';
+    li.style.alignItems = 'flex-start';
+    var info = document.createElement('div');
+    info.style.flex = '1';
+    var t = document.createElement('div');
+    t.className = 'title';
+    t.textContent = 'Line ' + iss.line + ' — ' + iss.msg;
+    info.appendChild(t);
+    var sub = document.createElement('div');
+    sub.style.fontSize = '11px';
+    sub.style.color = iss.severity === 'warning' ? 'var(--error, #d1242f)' : 'var(--text2)';
+    sub.textContent = iss.severity;
+    info.appendChild(sub);
+    li.appendChild(info);
+    li.addEventListener('click', function () { jumpToEditorLine(iss.line); });
+    list.appendChild(li);
+  });
+}
+
+function setLintOpen(on) {
+  lintPanel = lintPanel || document.getElementById('lint-panel');
+  if (!lintPanel) return;
+  if (on) lintPanel.removeAttribute('hidden');
+  else lintPanel.setAttribute('hidden', '');
+  if (on) renderLintList();
+}
+
+// Templates, snippets & front matter (Phase 8)
+var TEMPLATES = [
+  { name: 'README', content: '# Project Name\n\nShort description of the project.\n\n## Installation\n\n```bash\nnpm install\n```\n\n## Usage\n\n## License\nMIT' },
+  { name: 'Changelog', content: '# Changelog\n\nAll notable changes to this project.\n\n## [Unreleased]\n\n### Added\n\n### Changed\n\n### Fixed\n' },
+  { name: 'ADR', content: '# ADR 0001: Title\n\n## Status\n\nProposed\n\n## Context\n\n## Decision\n\n## Consequences\n' },
+  { name: 'Meeting Notes', content: '# Meeting Notes\n\nDate: 2025-01-01\nAttendees: \n\n## Agenda\n\n- \n\n## Decisions\n\n## Action Items\n\n- [ ] \n' },
+  { name: 'PR Description', content: '## Summary\n\n## Changes\n\n- \n\n## Testing\n\n## Checklist\n\n- [ ] Tests added\n- [ ] Docs updated\n' },
+  { name: 'Daily Notes', content: '# Daily Notes\n\nDate: 2025-01-01\n\n## Tasks\n\n- [ ] \n\n## Notes\n\n## Tomorrow\n' }
+];
+var SNIPPETS = [
+  { name: 'table', trigger: ':table', text: '| Column | Column |\n|---|---|\n|  |  |' },
+  { name: 'code', trigger: ':code', text: '```\n\n```' },
+  { name: 'todo', trigger: ':todo', text: '- [ ] ' },
+  { name: 'note', trigger: ':note', text: '> **Note** ' },
+  { name: 'warning', trigger: ':warn', text: '> **Warning** ' },
+  { name: 'image', trigger: ':img', text: '![alt text](url)' },
+  { name: 'link', trigger: ':link', text: '[text](url)' },
+  { name: 'frontmatter', trigger: ':fm', text: '---\ntitle: \ndate: \n---\n' }
+];
+
+function extractFrontMatter(src) {
+  var m = String(src == null ? '' : src).match(/^---[ \\t]*\n([\\s\\S]*?)\n---[ \\t]*\n?/);
+  if (!m) return { meta: null, body: String(src == null ? '' : src) };
+  return { meta: m[1], body: String(src).slice(m[0].length) };
+}
+
+function parseFrontMatterMeta(meta) {
+  var rows = [];
+  String(meta || '').split('\n').forEach(function (line) {
+    var m = line.match(/^([A-Za-z0-9_-]+)\\s*:\\s*(.*)$/);
+    if (m) rows.push({ key: m[1], value: m[2] });
+  });
+  return rows;
+}
+
+function renderFrontMatterCard(meta) {
+  var rows = parseFrontMatterMeta(meta);
+  if (!rows.length) return null;
+  var card = document.createElement('div');
+  card.className = 'md-frontmatter';
+  var title = document.createElement('strong');
+  title.textContent = 'Metadata';
+  card.appendChild(title);
+  var dl = document.createElement('dl');
+  rows.forEach(function (r) {
+    var dt = document.createElement('dt'); dt.textContent = r.key;
+    var dd = document.createElement('dd'); dd.textContent = r.value;
+    dl.appendChild(dt); dl.appendChild(dd);
+  });
+  card.appendChild(dl);
+  return card;
+}
+
+function insertTemplate(content) {
+  var current = getText();
+  var merged = current.trim() ? (current + '\n\n' + content) : content;
+  setText(merged);
+  saveDraft(true);
+  renderNow();
+  updateOutline();
+  if (status) { status.textContent = 'Template inserted'; status.classList.remove('error'); }
+}
+
+function insertSnippet(text) {
+  // Insert at cursor if CodeMirror available.
+  if (cm) {
+    var cursor = cm.getCursor();
+    cm.replaceRange(text, cursor);
+    focusEditor();
+  } else if (editor) {
+    var start = editor.selectionStart || 0;
+    var end = editor.selectionEnd || 0;
+    var val = editor.value;
+    editor.value = val.slice(0, start) + text + val.slice(end);
+    editor.selectionStart = editor.selectionEnd = start + text.length;
+    focusEditor();
+  } else {
+    setText((getText() || '') + text);
+  }
+  saveDraft(false);
+  renderNow();
+}
+
+function renderTemplatesList() {
+  var list = document.getElementById('templates-list');
+  if (!list) return;
+  list.innerHTML = '';
+  TEMPLATES.forEach(function (t) {
+    var li = document.createElement('li');
+    li.className = 'docs-item';
+    var title = document.createElement('span');
+    title.className = 'title';
+    title.textContent = t.name;
+    li.appendChild(title);
+    var ins = document.createElement('button');
+    ins.className = 'del';
+    ins.style.opacity = '1';
+    ins.textContent = 'Insert';
+    ins.addEventListener('click', function (e) { e.stopPropagation(); insertTemplate(t.content); });
+    li.appendChild(ins);
+    list.appendChild(li);
+  });
+}
+
+function renderSnippetsList() {
+  var list = document.getElementById('snippets-list');
+  if (!list) return;
+  list.innerHTML = '';
+  SNIPPETS.forEach(function (s) {
+    var li = document.createElement('li');
+    li.className = 'docs-item';
+    var title = document.createElement('span');
+    title.className = 'title';
+    title.textContent = s.trigger + '  —  ' + s.name;
+    li.appendChild(title);
+    var ins = document.createElement('button');
+    ins.className = 'del';
+    ins.style.opacity = '1';
+    ins.textContent = 'Insert';
+    ins.addEventListener('click', function (e) { e.stopPropagation(); insertSnippet(s.text); });
+    li.appendChild(ins);
+    list.appendChild(li);
+  });
+}
+
+function setTemplatesOpen(on) {
+  var panel = document.getElementById('templates-panel');
+  if (!panel) return;
+  if (on) panel.removeAttribute('hidden');
+  else panel.setAttribute('hidden', '');
+  if (on) {
+    renderTemplatesList();
+    renderSnippetsList();
+  }
+}
+
+// Expand snippets on typing ':name ' in CodeMirror.
+function setupSnippetExpansion() {
+  if (!cm) return;
+  cm.on('inputRead', function (cmInstance, change) {
+    if (!change || !change.text || !change.text.length) return;
+    var line = cmInstance.getLine(change.from.line);
+    SNIPPETS.forEach(function (s) {
+      var trigger = s.trigger;
+      var pos = change.from.ch;
+      if (line.slice(Math.max(0, pos - trigger.length), pos) === trigger &&
+          (line.charAt(pos) === ' ' || pos === line.length)) {
+        // replace trigger with snippet
+        var from = { line: change.from.line, ch: pos - trigger.length };
+        var to = { line: change.from.line, ch: pos };
+        cmInstance.replaceRange(s.text, from, to);
+      }
+    });
+  });
+}
+
+// Advanced exports & productivity (Phase 9)
+function getEditorSelectionText() {
+  if (cm) {
+    var sel = cm.getSelection();
+    if (sel) return sel;
+  }
+  if (editor) {
+    var start = editor.selectionStart || 0;
+    var end = editor.selectionEnd || 0;
+    if (end > start) return editor.value.slice(start, end);
+  }
+  return getText();
+}
+
+function downloadSelection() {
+  var text = getEditorSelectionText();
+  if (!text) { if (status) status.textContent = 'Nothing to download'; return; }
+  downloadFile('marklens-selection.md', 'text/markdown;charset=utf-8', text);
+  flashAction(document.getElementById('dl-sel-btn'), 'Saved!');
+}
+
+function copyRichText() {
+  try {
+    var html = preview ? preview.innerHTML : '';
+    if (navigator.clipboard && window.ClipboardItem) {
+      var item = new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([preview ? preview.textContent : ''], { type: 'text/plain' }) });
+      navigator.clipboard.write([item]);
+    } else if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(preview ? preview.textContent : '');
+    }
+    var btn = document.getElementById('copy-rich-btn');
+    if (btn) flashAction(btn, 'Copied!');
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+// Command palette
+var COMMANDS = [
+  { name: 'Open settings', action: function () { if (chrome.runtime.openOptionsPage) chrome.runtime.openOptionsPage(); else chrome.tabs.create({ url: chrome.runtime.getURL('options.html') }); } },
+  { name: 'Toggle Zen mode', action: function () { setZen(!document.body.classList.contains('zen')); } },
+  { name: 'Toggle document library', action: function () { var p=document.getElementById('docs-panel'); if(p){ var o=p.hasAttribute('hidden'); if(o)p.removeAttribute('hidden'); else p.setAttribute('hidden',''); if(o)renderDocList(); } } },
+  { name: 'Toggle snapshots', action: function () { var was = document.getElementById('snaps-panel') && document.getElementById('snaps-panel').hasAttribute('hidden'); setSnapsOpen(!!was); } },
+  { name: 'Toggle outline', action: function () { var p=document.getElementById('outline-panel'); if(p){ var o=p.hasAttribute('hidden'); if(o)p.removeAttribute('hidden'); else p.setAttribute('hidden',''); if(o)updateOutline(); } } },
+  { name: 'Toggle templates', action: function () { var p=document.getElementById('templates-panel'); if(p){ var o=p.hasAttribute('hidden'); if(o)p.removeAttribute('hidden'); else p.setAttribute('hidden',''); if(o){renderTemplatesList();renderSnippetsList();} } } },
+  { name: 'Toggle lint', action: function () { var p=document.getElementById('lint-panel'); if(p){ var o=p.hasAttribute('hidden'); if(o)p.removeAttribute('hidden'); else p.setAttribute('hidden',''); if(o)renderLintList(); } } },
+  { name: 'Toggle themes', action: function () { var p=document.getElementById('themes-panel'); if(p){ var o=p.hasAttribute('hidden'); if(o)p.removeAttribute('hidden'); else p.setAttribute('hidden',''); if(o)renderThemeList(); } } },
+  { name: 'New document', action: function () { var b=document.getElementById('docs-new-btn'); if(b) b.click(); } },
+  { name: 'New snapshot', action: function () { var b=document.getElementById('snaps-new-btn'); if(b) b.click(); } },
+  { name: 'Insert / update TOC', action: insertOrUpdateToc },
+  { name: 'Render preview', action: function () { renderNow(); } },
+  { name: 'Clear editor', action: function () { document.getElementById('clear-btn').click(); } },
+  { name: 'Export Markdown', action: function () { document.getElementById('dl-md-btn').click(); } },
+  { name: 'Export HTML', action: function () { document.getElementById('dl-html-btn').click(); } },
+  { name: 'Export selection', action: downloadSelection },
+  { name: 'Print / PDF', action: function () { window.print(); } }
+];
+
+function openCommandPalette() {
+  var modal = document.getElementById('cmd-modal');
+  if (!modal) return;
+  modal.removeAttribute('hidden');
+  var input = document.getElementById('cmd-input');
+  var list = document.getElementById('cmd-list');
+  if (input) { input.value = ''; input.focus(); }
+  function render(q) {
+    if (!list) return;
+    list.innerHTML = '';
+    var ql = (q || '').toLowerCase();
+    COMMANDS.filter(function (c) { return !ql || c.name.toLowerCase().indexOf(ql) !== -1; }).forEach(function (c) {
+      var li = document.createElement('li');
+      li.className = 'docs-item';
+      var title = document.createElement('span');
+      title.className = 'title';
+      title.textContent = c.name;
+      li.appendChild(title);
+      li.addEventListener('click', function () {
+        modal.setAttribute('hidden', '');
+        try { c.action(); } catch (e) { console.error(e); }
+      });
+      list.appendChild(li);
+    });
+  }
+  if (input) {
+    input.oninput = function () { render(input.value); };
+  }
+  render('');
+}
+
 function initDocLibrary(cb) {
   if (!globalThis.mdDB) { if (cb) cb(); return; }
   globalThis.mdDB.ready(function (ok) {
@@ -985,7 +1361,8 @@ function updateCounts(src) {
   if (!countsEl) return;
   var text = src || '';
   var words = text.trim() ? text.trim().split(/\s+/).length : 0;
-  countsEl.textContent = words + (words === 1 ? ' word' : ' words') + ' · ' + text.length + ' chars';
+  var minutes = words ? Math.max(1, Math.round(words / 200)) : 0;
+  countsEl.textContent = words + (words === 1 ? ' word' : ' words') + ' · ' + text.length + ' chars' + (words ? ' · ' + minutes + ' min read' : '');
 }
 
 function hasHtmlTags(s) {
@@ -995,6 +1372,10 @@ function hasHtmlTags(s) {
 function renderNow() {
   var src = getText();
   updateCounts(src);
+  if (!globalThis.katex && !katexLoading && (inputMode === 'md' || (inputMode === 'html' && src.trim() && !hasHtmlTags(src))) && /(?:\$\$|\$[^$\n]+\$)/.test(src)) {
+    loadKatex(function () { renderNow(); });
+    return;
+  }
   // Auto-detect: HTML mode holding tag-less (Markdown) content renders as
   // Markdown — Turndown could only echo it back flattened. The toggle keeps
   // the user's explicit choice; this only picks the renderer per content.
@@ -1046,6 +1427,44 @@ function runMermaid() {
   });
 }
 
+var katexLoading = false;
+function loadKatex(cb) {
+  if (globalThis.katex) { if (cb) cb(); return; }
+  if (katexLoading) { if (cb) setTimeout(function () { loadKatex(cb); }, 60); return; }
+  katexLoading = true;
+  if (!document.querySelector('link[href*="katex.min.css"]')) {
+    var link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL)
+      ? chrome.runtime.getURL('vendor/katex/katex.min.css') : 'vendor/katex/katex.min.css';
+    document.head.appendChild(link);
+  }
+  var script = document.createElement('script');
+  script.src = (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL)
+    ? chrome.runtime.getURL('vendor/katex/katex.min.js') : 'vendor/katex/katex.min.js';
+  script.onload = function () { katexLoading = false; if (cb) cb(); };
+  script.onerror = function () { katexLoading = false; if (cb) cb(); };
+  document.head.appendChild(script);
+}
+
+function renderMathInText(text) {
+  if (!globalThis.katex) return text;
+  var codeBlocks = [];
+  var working = String(text == null ? '' : text);
+  working = working.replace(/```[\s\S]*?```/g, function (m) { codeBlocks.push(m); return '%%CODE' + (codeBlocks.length - 1) + '%%'; });
+  working = working.replace(/`[^`\n]*`/g, function (m) { codeBlocks.push(m); return '%%CODE' + (codeBlocks.length - 1) + '%%'; });
+  working = working.replace(/\$\$([\s\S]+?)\$\$/g, function (_, eq) {
+    try { return globalThis.katex.renderToString(eq.trim(), { displayMode: true, throwOnError: false }); }
+    catch (e) { return '$$' + eq + '$$'; }
+  });
+  working = working.replace(/\$([^\$\n]+?)\$/g, function (_, eq) {
+    try { return globalThis.katex.renderToString(eq.trim(), { displayMode: false, throwOnError: false }); }
+    catch (e) { return '$' + eq + '$'; }
+  });
+  working = working.replace(/%%CODE(\d+)%%/g, function (_, i) { return codeBlocks[parseInt(i, 10)] || ''; });
+  return working;
+}
+
 function renderMarkdown(src) {
   if (!globalThis.marked || typeof globalThis.marked.parse !== 'function') {
     if (status) { status.textContent = 'Renderer missing'; status.classList.add('error'); }
@@ -1054,7 +1473,9 @@ function renderMarkdown(src) {
     return;
   }
   try {
-    var html = globalThis.marked.parse(src);
+    var frontMatter = extractFrontMatter(src);
+    var renderSrc = globalThis.katex ? renderMathInText(frontMatter.body) : frontMatter.body;
+    var html = globalThis.marked.parse(renderSrc);
     // Flattened selections (Chrome strips newlines in selectionText)
     // render tables as paragraphs — adopt the reflowed source only
     // when it parses to more <table>s than the original.
@@ -1068,6 +1489,10 @@ function renderMarkdown(src) {
       }
     }
     preview.innerHTML = safeHtml(html);
+    if (frontMatter.meta) {
+      var fmCard = renderFrontMatterCard(frontMatter.meta);
+      if (fmCard) preview.insertBefore(fmCard, preview.firstChild);
+    }
     convertMermaidCodeBlocks();
     ensureHeadingIds();
     renderPreviewToc();
@@ -1310,6 +1735,49 @@ if (themeExportBtn) themeExportBtn.addEventListener('click', function () {
   downloadFile('marklens-themes.json', 'application/json;charset=utf-8', JSON.stringify(data, null, 2));
 });
 
+var lintBtn = document.getElementById('lint-btn');
+var lintCloseBtn = document.getElementById('lint-close-btn');
+var lintRunBtn = document.getElementById('lint-run-btn');
+var templatesBtn = document.getElementById('templates-btn');
+var templatesCloseBtn = document.getElementById('templates-close-btn');
+if (templatesBtn) templatesBtn.addEventListener('click', function () {
+  var panel = document.getElementById('templates-panel');
+  if (!panel) return;
+  var opening = panel.hasAttribute('hidden');
+  if (opening) panel.removeAttribute('hidden');
+  else panel.setAttribute('hidden', '');
+  if (opening) { renderTemplatesList(); renderSnippetsList(); }
+});
+if (templatesCloseBtn) templatesCloseBtn.addEventListener('click', function () {
+  var panel = document.getElementById('templates-panel');
+  if (panel) panel.setAttribute('hidden', '');
+});
+if (lintBtn) lintBtn.addEventListener('click', function () {
+  var wasHidden = !lintPanel || lintPanel.hasAttribute('hidden');
+  setLintOpen(!!wasHidden);
+});
+if (lintCloseBtn) lintCloseBtn.addEventListener('click', function () { setLintOpen(false); });
+if (lintRunBtn) lintRunBtn.addEventListener('click', renderLintList);
+
+var dlSelBtn = document.getElementById('dl-sel-btn');
+var copyRichBtn = document.getElementById('copy-rich-btn');
+if (dlSelBtn) dlSelBtn.addEventListener('click', downloadSelection);
+if (copyRichBtn) copyRichBtn.addEventListener('click', copyRichText);
+
+var cmdClose = document.getElementById('cmd-close');
+var cmdModal = document.getElementById('cmd-modal');
+var cmdInput = document.getElementById('cmd-input');
+if (cmdClose) cmdClose.addEventListener('click', function () { if (cmdModal) cmdModal.setAttribute('hidden', ''); });
+if (cmdModal) cmdModal.addEventListener('click', function (e) { if (e.target === cmdModal) cmdModal.setAttribute('hidden', ''); });
+if (cmdInput) cmdInput.addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') {
+    var first = document.querySelector('#cmd-list .docs-item');
+    if (first) first.click();
+  } else if (e.key === 'Escape') {
+    if (cmdModal) cmdModal.setAttribute('hidden', '');
+  }
+});
+
 // Keyboard: Alt+1/2/3 switch views, Alt+Z toggles zen, Esc exits zen,
 // Ctrl/Cmd+Enter or Ctrl/Cmd+S copies.
 // Arrow keys move between layout tabs when the tablist is focused.
@@ -1332,6 +1800,11 @@ document.addEventListener('keydown', function (e) {
   if (e.altKey && !mod && (e.key === 'z' || e.key === 'Z')) {
     e.preventDefault();
     setZen(!document.body.classList.contains('zen'));
+    return;
+  }
+  if (mod && !e.altKey && (e.key === 'k' || e.key === 'K')) {
+    e.preventDefault();
+    openCommandPalette();
     return;
   }
   if (mod && !e.altKey && (e.key === 'Enter' || e.key === 's' || e.key === 'S')) {

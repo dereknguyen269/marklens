@@ -409,6 +409,20 @@ body {
 
 body.zen .docs-panel { display: none !important; }
 
+/* Front matter card */
+.md-frontmatter {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 10px 12px;
+  margin: 0 0 16px 0;
+  font-size: 12px;
+}
+.md-frontmatter strong { display: block; margin-bottom: 6px; font-size: 11px; text-transform: uppercase; color: var(--text2); letter-spacing: .04em; }
+.md-frontmatter dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 4px 10px; }
+.md-frontmatter dt { color: var(--text2); font-weight: 600; }
+.md-frontmatter dd { margin: 0; color: var(--text); }
+
 /* Preview TOC */
 .md-preview-toc {
   border: 1px solid var(--border);
