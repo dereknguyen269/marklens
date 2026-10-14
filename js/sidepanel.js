@@ -701,6 +701,196 @@ function setOutlineOpen(on) {
   if (on) updateOutline();
 }
 
+// Custom themes (Phase 4)
+var customThemes = {};
+var themesPanel = null;
+
+function registerCustomTheme(theme) {
+  if (!theme || !theme.id || !theme.vars) return;
+  customThemes[theme.id] = theme;
+  globalThis.SIDEPANEL_THEMES = globalThis.SIDEPANEL_THEMES || {};
+  globalThis.SIDEPANEL_THEMES['custom:' + theme.id] = { vars: theme.vars, hl: theme.hl === 'dark' ? 'dark' : 'light' };
+}
+
+function refreshThemeSelect() {
+  if (!toolTheme) return;
+  var old = toolTheme.querySelector('optgroup[label="Custom"]');
+  if (old) old.remove();
+  var ids = Object.keys(customThemes);
+  if (!ids.length) return;
+  var group = document.createElement('optgroup');
+  group.label = 'Custom';
+  ids.forEach(function (id) {
+    var opt = document.createElement('option');
+    opt.value = 'custom:' + id;
+    opt.textContent = customThemes[id].name || 'Custom theme';
+    group.appendChild(opt);
+  });
+  toolTheme.appendChild(group);
+}
+
+function baseThemeVars(base) {
+  var t = (SIDEPANEL_THEMES && SIDEPANEL_THEMES[base === 'dark' ? 'dark' : 'light']) || {};
+  return t.vars ? JSON.parse(JSON.stringify(t.vars)) : {};
+}
+
+function loadCustomThemes(cb) {
+  if (!globalThis.mdDB) { if (cb) cb(); return; }
+  globalThis.mdDB.ready(function (ok) {
+    if (!ok) { if (cb) cb(); return; }
+    globalThis.mdDB.all('themes', function (items) {
+      (items || []).forEach(registerCustomTheme);
+      if (cb) cb();
+    });
+  });
+}
+
+function colorValue(theme, key, fallback) {
+  if (theme && theme.vars && theme.vars[key]) return theme.vars[key];
+  return fallback;
+}
+
+function renderThemeList() {
+  var list = document.getElementById('themes-list');
+  if (!list) return;
+  list.innerHTML = '';
+  var ids = Object.keys(customThemes);
+  if (!ids.length) {
+    var empty = document.createElement('li');
+    empty.className = 'docs-empty';
+    empty.textContent = 'No custom themes yet. Fill the form and Save.';
+    list.appendChild(empty);
+    return;
+  }
+  ids.forEach(function (id) {
+    var t = customThemes[id];
+    var li = document.createElement('li');
+    li.className = 'docs-item';
+    var title = document.createElement('span');
+    title.className = 'title';
+    title.textContent = t.name || 'Custom theme';
+    li.appendChild(title);
+    var act = document.createElement('div');
+    act.style.display = 'flex';
+    act.style.gap = '4px';
+    var applyBtn = document.createElement('button');
+    applyBtn.className = 'del';
+    applyBtn.style.opacity = '1';
+    applyBtn.textContent = 'Apply';
+    applyBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      config.theme = 'custom:' + id;
+      applyTheme(config.theme);
+      if (toolTheme) toolTheme.value = config.theme;
+      saveConfig();
+    });
+    act.appendChild(applyBtn);
+    var exportBtn = document.createElement('button');
+    exportBtn.className = 'del';
+    exportBtn.style.opacity = '1';
+    exportBtn.textContent = 'Export';
+    exportBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      downloadFile((t.name || 'theme') + '.json', 'application/json;charset=utf-8', JSON.stringify(t, null, 2));
+    });
+    act.appendChild(exportBtn);
+    var delBtn = document.createElement('button');
+    delBtn.className = 'del';
+    delBtn.textContent = '×';
+    delBtn.title = 'Delete';
+    delBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (!confirm('Delete theme "' + (t.name || 'Custom theme') + '"?')) return;
+      globalThis.mdDB.del('themes', id, function () {
+        delete customThemes[id];
+        delete globalThis.SIDEPANEL_THEMES['custom:' + id];
+        if (config.theme === 'custom:' + id) {
+          config.theme = 'light';
+          applyTheme('light');
+          if (toolTheme) toolTheme.value = 'light';
+          saveConfig();
+        }
+        refreshThemeSelect();
+        renderThemeList();
+      });
+    });
+    act.appendChild(delBtn);
+    li.appendChild(act);
+    list.appendChild(li);
+  });
+}
+
+function saveCustomTheme() {
+  if (!globalThis.mdDB) return;
+  var name = (document.getElementById('theme-name').value || '').trim();
+  if (!name) name = 'Custom theme';
+  var base = document.getElementById('theme-base').value;
+  var vars = baseThemeVars(base);
+  vars['--bg'] = document.getElementById('theme-bg').value;
+  vars['--surface'] = document.getElementById('theme-surface').value;
+  vars['--border'] = document.getElementById('theme-border').value;
+  vars['--text'] = document.getElementById('theme-text').value;
+  vars['--text2'] = document.getElementById('theme-text2').value;
+  vars['--accent'] = document.getElementById('theme-accent').value;
+  vars['--code-bg'] = document.getElementById('theme-codebg').value;
+  var hl = document.getElementById('theme-hl').value === 'dark' ? 'dark' : 'light';
+  var theme = { id: uid(), name: name, vars: vars, hl: hl, createdAt: Date.now() };
+  globalThis.mdDB.put('themes', theme, function (ok) {
+    if (!ok) return;
+    registerCustomTheme(theme);
+    refreshThemeSelect();
+    renderThemeList();
+    config.theme = 'custom:' + theme.id;
+    applyTheme(config.theme);
+    if (toolTheme) toolTheme.value = config.theme;
+    saveConfig();
+    if (status) { status.textContent = 'Theme saved'; status.classList.remove('error'); }
+  });
+}
+
+function importCustomThemesFromFile(file) {
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function () {
+    try {
+      var data = JSON.parse(String(reader.result || ''));
+      var arr = Array.isArray(data) ? data : [data];
+      arr.forEach(function (item) {
+        if (!item || !item.vars) return;
+        var theme = {
+          id: item.id || uid(),
+          name: item.name || 'Imported theme',
+          vars: item.vars,
+          hl: item.hl === 'dark' ? 'dark' : 'light',
+          createdAt: Date.now()
+        };
+        globalThis.mdDB.put('themes', theme, function (ok) {
+          if (ok) {
+            registerCustomTheme(theme);
+            refreshThemeSelect();
+            renderThemeList();
+          }
+        });
+      });
+      if (status) { status.textContent = 'Theme imported'; status.classList.remove('error'); }
+    } catch (e) {
+      if (status) { status.textContent = 'Theme import failed'; status.classList.add('error'); }
+    }
+  };
+  reader.readAsText(file);
+}
+
+function setThemesOpen(on) {
+  themesPanel = themesPanel || document.getElementById('themes-panel');
+  if (!themesPanel) return;
+  if (on) themesPanel.removeAttribute('hidden');
+  else themesPanel.setAttribute('hidden', '');
+  if (on) {
+    renderThemeList();
+    // prime color inputs from selected base not needed
+  }
+}
+
 function initDocLibrary(cb) {
   if (!globalThis.mdDB) { if (cb) cb(); return; }
   globalThis.mdDB.ready(function (ok) {
@@ -816,6 +1006,46 @@ function renderNow() {
   renderMarkdown(src);
 }
 
+function convertMermaidCodeBlocks() {
+  if (!preview) return;
+  var codes = preview.querySelectorAll('pre code');
+  for (var i = 0; i < codes.length; i++) {
+    var code = codes[i];
+    var cls = code.className || '';
+    if (cls.indexOf('language-mermaid') === -1 && cls.indexOf('lang-mermaid') === -1) continue;
+    var pre = code.parentNode;
+    if (!pre || !pre.parentNode) continue;
+    var div = document.createElement('div');
+    div.className = 'mermaid';
+    div.textContent = code.textContent || '';
+    pre.parentNode.replaceChild(div, pre);
+  }
+}
+
+function loadMermaid(cb) {
+  if (globalThis.mermaid) { if (cb) cb(globalThis.mermaid); return; }
+  var script = document.createElement('script');
+  script.src = (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL)
+    ? chrome.runtime.getURL('vendor/mermaid.min.js') : 'vendor/mermaid.min.js';
+  script.onload = function () { if (cb) cb(globalThis.mermaid); };
+  script.onerror = function () {
+    if (status) { status.textContent = 'Mermaid failed to load'; status.classList.add('error'); }
+    if (cb) cb(null);
+  };
+  document.head.appendChild(script);
+}
+
+function runMermaid() {
+  if (!preview || !preview.querySelector('.mermaid')) return;
+  loadMermaid(function (m) {
+    if (!m) return;
+    try { m.initialize({ startOnLoad: false, securityLevel: 'strict' }); } catch (e) {}
+    try { m.run({ nodes: preview.querySelectorAll('.mermaid') }); } catch (e) {
+      console.error('[MD] mermaid run error:', e);
+    }
+  });
+}
+
 function renderMarkdown(src) {
   if (!globalThis.marked || typeof globalThis.marked.parse !== 'function') {
     if (status) { status.textContent = 'Renderer missing'; status.classList.add('error'); }
@@ -838,8 +1068,10 @@ function renderMarkdown(src) {
       }
     }
     preview.innerHTML = safeHtml(html);
+    convertMermaidCodeBlocks();
     ensureHeadingIds();
     renderPreviewToc();
+    runMermaid();
     if (status) { status.textContent = 'Live'; status.classList.remove('error'); }
     copyBtn.textContent = 'Copy HTML';
     copyBtn.title = 'Copy rendered HTML (Ctrl+Enter / Ctrl+S)';
@@ -1051,6 +1283,31 @@ if (docsNewBtn) docsNewBtn.addEventListener('click', function () {
 if (docsSearch) docsSearch.addEventListener('input', function () {
   docsFilter = this.value || '';
   renderDocList();
+});
+
+// Themes UI wiring
+var themesBtn = document.getElementById('themes-btn');
+var themesCloseBtn = document.getElementById('themes-close-btn');
+var themeSaveBtn = document.getElementById('theme-save-btn');
+var themeImportBtn = document.getElementById('theme-import-btn');
+var themeExportBtn = document.getElementById('theme-export-btn');
+var themeImportFile = document.getElementById('theme-import-file');
+if (themesBtn) themesBtn.addEventListener('click', function () {
+  var wasHidden = !themesPanel || themesPanel.hasAttribute('hidden');
+  setThemesOpen(!!wasHidden);
+});
+if (themesCloseBtn) themesCloseBtn.addEventListener('click', function () { setThemesOpen(false); });
+if (themeSaveBtn) themeSaveBtn.addEventListener('click', saveCustomTheme);
+if (themeImportBtn && themeImportFile) themeImportBtn.addEventListener('click', function () { themeImportFile.click(); });
+if (themeImportFile) themeImportFile.addEventListener('change', function () {
+  if (this.files && this.files[0]) importCustomThemesFromFile(this.files[0]);
+  this.value = '';
+});
+if (themeExportBtn) themeExportBtn.addEventListener('click', function () {
+  var ids = Object.keys(customThemes);
+  if (!ids.length) return;
+  var data = ids.map(function (id) { return customThemes[id]; });
+  downloadFile('marklens-themes.json', 'application/json;charset=utf-8', JSON.stringify(data, null, 2));
 });
 
 // Keyboard: Alt+1/2/3 switch views, Alt+Z toggles zen, Esc exits zen,
@@ -1367,6 +1624,15 @@ loadConfig(function () {
   }
   applyConfig();
   initEditor();
+
+  // Load any user-created custom themes before the (potentially custom) saved
+  // theme is applied.
+  loadCustomThemes(function () {
+    refreshThemeSelect();
+    applyTheme(config.theme || DEFAULTS.theme);
+    if (toolTheme) toolTheme.value = config.theme || DEFAULTS.theme;
+    renderThemeList();
+  });
 
   // Pending context-menu selection takes precedence.
   chrome.storage.session.get(['pendingMarkdown', 'pendingHtml'], function (res) {

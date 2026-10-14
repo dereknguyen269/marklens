@@ -132,6 +132,45 @@
       </label>
       <ul id="outline-list" class="docs-list"></ul>
     </aside>
+    <aside id="themes-panel" class="docs-panel" hidden>
+      <div class="docs-head">
+        <strong>Custom themes</strong>
+        <div class="docs-head-actions">
+          <button id="themes-close-btn" title="Close" aria-label="Close">✕</button>
+        </div>
+      </div>
+      <div style="padding:8px 10px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:6px;">
+        <input id="theme-name" class="docs-search" style="margin:0;" type="text" placeholder="Theme name">
+        <select id="theme-base" class="docs-search" style="margin:0;">
+          <option value="light">Base: Light</option>
+          <option value="dark">Base: Dark</option>
+        </select>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+          <label style="font-size:11px;color:var(--text2);">Background<input id="theme-bg" type="color" value="#ffffff"></label>
+          <label style="font-size:11px;color:var(--text2);">Surface<input id="theme-surface" type="color" value="#f7f8fa"></label>
+          <label style="font-size:11px;color:var(--text2);">Border<input id="theme-border" type="color" value="#e3e6ea"></label>
+          <label style="font-size:11px;color:var(--text2);">Text<input id="theme-text" type="color" value="#1f2328"></label>
+          <label style="font-size:11px;color:var(--text2);">Secondary<input id="theme-text2" type="color" value="#656d76"></label>
+          <label style="font-size:11px;color:var(--text2);">Accent<input id="theme-accent" type="color" value="#4f46e5"></label>
+          <label style="font-size:11px;color:var(--text2);">Code bg<input id="theme-codebg" type="color" value="#f0f2f5"></label>
+          <label style="font-size:11px;color:var(--text2);">Highlight.js
+            <select id="theme-hl" class="docs-search" style="margin:0;padding:2px;">
+              <option value="light">light</option>
+              <option value="dark">dark</option>
+            </select>
+          </label>
+        </div>
+        <div style="display:flex;gap:6px;">
+          <button id="theme-save-btn" class="docs-head-actions button" style="flex:1;padding:6px;border:1px solid var(--border);border-radius:6px;background:var(--accent);color:#fff;">Save theme</button>
+        </div>
+        <div style="display:flex;gap:6px;">
+          <button id="theme-import-btn" style="flex:1;padding:6px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);">Import</button>
+          <button id="theme-export-btn" style="flex:1;padding:6px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);">Export</button>
+        </div>
+        <input id="theme-import-file" type="file" accept="application/json" hidden>
+      </div>
+      <ul id="themes-list" class="docs-list"></ul>
+    </aside>
     <section class="pane editor-pane">
       <textarea id="editor" spellcheck="false" placeholder="# Write or paste Markdown here…
 
@@ -152,6 +191,7 @@ Select text on a page → right-click → “Preview as Markdown”"></textarea>
       <button id="docs-btn" title="Document library" aria-live="polite">Docs</button>
       <button id="snaps-btn" title="Version snapshots" aria-live="polite">Snaps</button>
       <button id="outline-btn" title="Outline and table of contents" aria-live="polite">Outline</button>
+      <button id="themes-btn" title="Custom themes" aria-live="polite">Themes</button>
       <button id="dl-md-btn" title="Download as Markdown file" aria-live="polite">↓ MD</button>
       <button id="dl-html-btn" title="Download as styled HTML file" aria-live="polite">↓ HTML</button>
       <button id="print-btn" title="Print or save as PDF" aria-live="polite">PDF</button>

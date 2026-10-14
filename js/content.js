@@ -10,6 +10,43 @@
       : html;
   }
 
+  function convertMermaidCodeBlocks(container) {
+    if (!container) return;
+    var codes = container.querySelectorAll('pre code');
+    for (var i = 0; i < codes.length; i++) {
+      var code = codes[i];
+      var cls = code.className || '';
+      if (cls.indexOf('language-mermaid') === -1 && cls.indexOf('lang-mermaid') === -1) continue;
+      var pre = code.parentNode;
+      if (!pre || !pre.parentNode) continue;
+      var div = document.createElement('div');
+      div.className = 'mermaid';
+      div.textContent = code.textContent || '';
+      pre.parentNode.replaceChild(div, pre);
+    }
+  }
+
+  function loadMermaid(cb) {
+    if (globalThis.mermaid) { if (cb) cb(globalThis.mermaid); return; }
+    var script = document.createElement('script');
+    script.src = (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL)
+      ? chrome.runtime.getURL('vendor/mermaid.min.js') : 'vendor/mermaid.min.js';
+    script.onload = function () { if (cb) cb(globalThis.mermaid); };
+    script.onerror = function () { if (cb) cb(null); };
+    document.head.appendChild(script);
+  }
+
+  function runMermaid(container) {
+    if (!container || !container.querySelector('.mermaid')) return;
+    loadMermaid(function (m) {
+      if (!m) return;
+      try { m.initialize({ startOnLoad: false, securityLevel: 'strict' }); } catch (e) {}
+      try { m.run({ nodes: container.querySelectorAll('.mermaid') }); } catch (e) {
+        console.error('[MD] mermaid run error:', e);
+      }
+    });
+  }
+
   function hasHtmlTags(s) {
     return /<\/?[a-zA-Z][^<>]*>/.test(s || '');
   }
@@ -379,7 +416,9 @@
           }
         }
         body.innerHTML = safeHtml(html);
+        convertMermaidCodeBlocks(body);
         lastSourceText = text || '';
+        runMermaid(body);
         if (copyBtn) { copyBtn.textContent = 'Copy HTML'; copyBtn.title = 'Copy rendered HTML'; }
         if (titleEl) titleEl.textContent = 'Markdown Preview';
       } catch (e) {
