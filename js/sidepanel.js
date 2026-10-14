@@ -7,7 +7,8 @@ var DEFAULTS = {
   mode: 'popup',
   view: 'split',
   inputMode: 'md',
-  keymap: 'default'
+  keymap: 'default',
+  previewToc: false
 };
 
 var config = {};
@@ -558,6 +559,148 @@ function renderSnapList() {
   });
 }
 
+// Outline / TOC (Phase 3)
+var outlineBtn = null;
+var outlinePanel = null;
+function slugifyHeading(text) {
+  return String(text == null ? '' : text).toLowerCase().trim()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+function parseOutline(src) {
+  var lines = String(src == null ? '' : src).split('\n');
+  var out = [];
+  var inFence = false;
+  var fenceChar = null;
+  for (var i = 0; i < lines.length; i++) {
+    var fenceMatch = lines[i].match(/^(`{3,}|~{3,})/);
+    if (fenceMatch) {
+      if (!inFence) { inFence = true; fenceChar = fenceMatch[1].charAt(0); }
+      else if (lines[i].charAt(0) === fenceChar) { inFence = false; fenceChar = null; }
+      continue;
+    }
+    if (inFence) continue;
+    var m = lines[i].match(/^(#{1,6})\s+(.+?)\s*#*\s*$/);
+    if (m) out.push({ level: m[1].length, text: m[2].trim(), line: i + 1 });
+  }
+  return out;
+}
+function jumpToEditorLine(line) {
+  if (cm) {
+    var pos = { line: Math.max(0, (line || 1) - 1), ch: 0 };
+    try { cm.setCursor(pos); cm.scrollIntoView(pos, 200); cm.focus(); } catch (e) {}
+    return;
+  }
+  if (editor) {
+    try {
+      var lines = editor.value.split('\n');
+      var approx = Math.min(editor.scrollHeight, Math.max(0, (line - 1) * 20));
+      editor.scrollTop = approx;
+      editor.focus();
+    } catch (e) {}
+  }
+}
+function updateOutline() {
+  var list = document.getElementById('outline-list');
+  if (!list) return;
+  var items = parseOutline(getText());
+  list.innerHTML = '';
+  if (!items.length) {
+    var empty = document.createElement('li');
+    empty.className = 'docs-empty';
+    empty.textContent = 'No headings yet.';
+    list.appendChild(empty);
+    return;
+  }
+  items.forEach(function (h) {
+    var li = document.createElement('li');
+    li.className = 'docs-item';
+    li.style.paddingLeft = (6 + (h.level - 1) * 12) + 'px';
+    var lvl = document.createElement('span');
+    lvl.style.fontSize = '10px';
+    lvl.style.color = 'var(--text2)';
+    lvl.style.marginRight = '6px';
+    lvl.textContent = 'H' + h.level;
+    li.appendChild(lvl);
+    var title = document.createElement('span');
+    title.className = 'title';
+    title.textContent = h.text;
+    li.appendChild(title);
+    li.addEventListener('click', function () { jumpToEditorLine(h.line); });
+    list.appendChild(li);
+  });
+}
+function ensureHeadingIds() {
+  if (!preview) return;
+  preview.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach(function (h) {
+    if (!h.id) h.id = slugifyHeading(h.textContent || '');
+  });
+}
+function generateTocMarkdown() {
+  var items = parseOutline(getText());
+  if (!items.length) return null;
+  var lines = ['<!-- TOC -->', ''];
+  items.forEach(function (h) {
+    var indent = '';
+    for (var i = 1; i < h.level; i++) indent += '  ';
+    lines.push(indent + '- [' + h.text + '](#' + slugifyHeading(h.text) + ')');
+  });
+  lines.push('', '<!-- /TOC -->');
+  return lines.join('\n');
+}
+function insertOrUpdateToc() {
+  var toc = generateTocMarkdown();
+  if (!toc) { if (status) { status.textContent = 'No headings to build a TOC'; status.classList.add('error'); } return; }
+  var current = getText();
+  var re = /<!-- TOC -->[\s\S]*?<!-- \/TOC -->/m;
+  var next = re.test(current) ? current.replace(re, toc) : (toc + '\n\n' + current);
+  setText(next);
+  saveDraft(true);
+  renderNow();
+  updateOutline();
+  if (status) { status.textContent = 'TOC updated'; status.classList.remove('error'); }
+}
+function renderPreviewToc() {
+  if (!preview) return;
+  var old = preview.querySelector('.md-preview-toc');
+  if (old) old.remove();
+  if (!config.previewToc) return;
+  var heads = Array.prototype.slice.call(preview.querySelectorAll('h1,h2,h3,h4,h5,h6'));
+  if (!heads.length) return;
+  var nav = document.createElement('nav');
+  nav.className = 'md-preview-toc';
+  var title = document.createElement('strong');
+  title.textContent = 'Contents';
+  nav.appendChild(title);
+  var ul = document.createElement('ul');
+  heads.forEach(function (h) {
+    var level = parseInt(String(h.tagName).charAt(1), 10) || 1;
+    var li = document.createElement('li');
+    li.style.marginLeft = ((level - 1) * 12) + 'px';
+    var a = document.createElement('a');
+    a.href = '#' + (h.id || slugifyHeading(h.textContent || ''));
+    a.textContent = h.textContent || '';
+    a.addEventListener('click', function (e) {
+      e.preventDefault();
+      var target = document.getElementById(a.getAttribute('href').slice(1));
+      if (target && typeof target.scrollIntoView === 'function') target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    li.appendChild(a);
+    ul.appendChild(li);
+  });
+  nav.appendChild(ul);
+  preview.insertBefore(nav, preview.firstChild);
+}
+function setOutlineOpen(on) {
+  outlinePanel = outlinePanel || document.getElementById('outline-panel');
+  if (!outlinePanel) return;
+  if (on) outlinePanel.removeAttribute('hidden');
+  else outlinePanel.setAttribute('hidden', '');
+  if (on) updateOutline();
+}
+
 function initDocLibrary(cb) {
   if (!globalThis.mdDB) { if (cb) cb(); return; }
   globalThis.mdDB.ready(function (ok) {
@@ -695,9 +838,12 @@ function renderMarkdown(src) {
       }
     }
     preview.innerHTML = safeHtml(html);
+    ensureHeadingIds();
+    renderPreviewToc();
     if (status) { status.textContent = 'Live'; status.classList.remove('error'); }
     copyBtn.textContent = 'Copy HTML';
     copyBtn.title = 'Copy rendered HTML (Ctrl+Enter / Ctrl+S)';
+    updateOutline();
   } catch (e) {
     if (status) { status.textContent = 'Render error'; status.classList.add('error'); }
     if (preview) preview.innerHTML = '<pre style="color:#c00;white-space:pre-wrap">' + safeHtml(String(e && e.stack ? e.stack : e)) + '</pre>';
@@ -786,6 +932,7 @@ function convertHtmlToMd(html) {
   if (status) { status.textContent = 'HTML→MD'; status.classList.remove('error'); }
   copyBtn.textContent = 'Copy MD';
   copyBtn.title = 'Copy Markdown source (Ctrl+Enter / Ctrl+S)';
+  updateOutline();
 }
 
 function setInputMode(mode, silent) {
@@ -853,6 +1000,25 @@ if (snapsNewBtn) snapsNewBtn.addEventListener('click', function () {
   });
 });
 if (diffCloseBtn) diffCloseBtn.addEventListener('click', hideDiff);
+outlineBtn = document.getElementById('outline-btn');
+outlinePanel = document.getElementById('outline-panel');
+var outlineCloseBtn = document.getElementById('outline-close-btn');
+var outlineTocBtn = document.getElementById('outline-toc-btn');
+var outlinePreviewToc = document.getElementById('outline-preview-toc');
+if (outlineBtn) outlineBtn.addEventListener('click', function () {
+  var wasHidden = outlinePanel && outlinePanel.hasAttribute('hidden');
+  setOutlineOpen(!!wasHidden);
+});
+if (outlineCloseBtn) outlineCloseBtn.addEventListener('click', function () { setOutlineOpen(false); });
+if (outlineTocBtn) outlineTocBtn.addEventListener('click', insertOrUpdateToc);
+if (outlinePreviewToc) {
+  outlinePreviewToc.checked = !!config.previewToc;
+  outlinePreviewToc.addEventListener('change', function () {
+    config.previewToc = !!this.checked;
+    saveConfig();
+    renderNow();
+  });
+}
 var diffModal = document.getElementById('diff-modal');
 if (diffModal) diffModal.addEventListener('click', function (e) {
   if (e.target === diffModal) hideDiff();

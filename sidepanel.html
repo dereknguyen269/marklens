@@ -118,6 +118,20 @@
       <div id="snaps-doc-title" class="docs-empty" style="padding:6px 10px;text-align:left;"></div>
       <ul id="snaps-list" class="docs-list"></ul>
     </aside>
+    <aside id="outline-panel" class="docs-panel" hidden>
+      <div class="docs-head">
+        <strong>Outline</strong>
+        <div class="docs-head-actions">
+          <button id="outline-toc-btn" title="Insert or update a TOC in the document" aria-label="Insert TOC">TOC</button>
+          <button id="outline-close-btn" title="Close outline" aria-label="Close outline">✕</button>
+        </div>
+      </div>
+      <label style="display:flex;align-items:center;gap:6px;padding:6px 12px;font-size:12px;color:var(--text2);border-bottom:1px solid var(--border);">
+        <input type="checkbox" id="outline-preview-toc">
+        Preview table of contents
+      </label>
+      <ul id="outline-list" class="docs-list"></ul>
+    </aside>
     <section class="pane editor-pane">
       <textarea id="editor" spellcheck="false" placeholder="# Write or paste Markdown here…
 
@@ -137,6 +151,7 @@ Select text on a page → right-click → “Preview as Markdown”"></textarea>
     <div class="status-actions">
       <button id="docs-btn" title="Document library" aria-live="polite">Docs</button>
       <button id="snaps-btn" title="Version snapshots" aria-live="polite">Snaps</button>
+      <button id="outline-btn" title="Outline and table of contents" aria-live="polite">Outline</button>
       <button id="dl-md-btn" title="Download as Markdown file" aria-live="polite">↓ MD</button>
       <button id="dl-html-btn" title="Download as styled HTML file" aria-live="polite">↓ HTML</button>
       <button id="print-btn" title="Print or save as PDF" aria-live="polite">PDF</button>

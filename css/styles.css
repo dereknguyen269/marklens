@@ -409,6 +409,21 @@ body {
 
 body.zen .docs-panel { display: none !important; }
 
+/* Preview TOC */
+.md-preview-toc {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 10px 12px;
+  margin: 0 0 16px 0;
+  font-size: 13px;
+}
+.md-preview-toc strong { display: block; margin-bottom: 6px; font-size: 11px; text-transform: uppercase; color: var(--text2); letter-spacing: .04em; }
+.md-preview-toc ul { list-style: none; margin: 0; padding: 0; }
+.md-preview-toc li { margin: 2px 0; }
+.md-preview-toc a { color: var(--accent); text-decoration: none; }
+.md-preview-toc a:hover { text-decoration: underline; }
+
 /* Diff modal */
 .diff-modal {
   position: fixed;
