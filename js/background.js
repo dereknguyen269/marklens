@@ -14,6 +14,14 @@ chrome.runtime.onInstalled.addListener(function () {
       .catch(function (err) { console.error('[MD] sidePanel behavior error:', err); });
   }
 
+  // Older builds stored optional API credentials; the token feature is gone,
+  // so purge any leftover copy from users who upgrade.
+  chrome.storage.local.remove('mdApiTokens', function () {
+    if (chrome.runtime.lastError) {
+      console.warn('[MD] legacy token cleanup failed:', chrome.runtime.lastError.message);
+    }
+  });
+
   chrome.contextMenus.removeAll(function () {
     chrome.contextMenus.create(
       { id: MENU_ID, title: 'Preview as Markdown', contexts: ['selection'] },
@@ -157,26 +165,13 @@ function parsePrUrl(url) {
   return null;
 }
 
-// HTTP Basic header that survives non-ASCII usernames/passwords: btoa() only
-// accepts Latin-1 code points, so map UTF-8 bytes through encodeURIComponent +
-// unescape (a no-op for ASCII input, which is the common case).
-function basicAuthHeader(username, password) {
-  var raw = String(username) + ':' + String(password);
-  try {
-    return 'Basic ' + btoa(unescape(encodeURIComponent(raw)));
-  } catch (e) {
-    // Last resort: strip anything outside Latin-1 rather than throwing.
-    return 'Basic ' + btoa(raw.replace(/[^\u0000-\u00ff]/g, '?'));
-  }
-}
-
 // JSON fetch with friendly errors; never throws raw network objects.
 function fetchJson(url, headers) {
   return fetch(url, { headers: headers || {} }).then(function (resp) {
     if (!resp.ok) {
       var msg = 'HTTP ' + resp.status;
-      if (resp.status === 401) msg += ' (auth required for private repos — add a token in Settings)';
-      else if (resp.status === 403) msg += ' (rate limit or no access — add a token in Settings)';
+      if (resp.status === 401) msg += ' (private repository or authentication required)';
+      else if (resp.status === 403) msg += ' (rate limit or no access)';
       else if (resp.status === 404) msg += ' (Pull Request not found)';
       return resp.json().catch(function () { return null; }).then(function (data) {
         throw new Error(msg + (data && data.message ? ' — ' + data.message : ''));
@@ -203,10 +198,9 @@ function fetchAllGitHubComments(url, headers) {
 
 // Fetch the PR + its comments and normalize to
 // { title, state, author, body, link, comments: [{ author, body, date }] }.
-function fetchGitHubPr(pr, tokens) {
+function fetchGitHubPr(pr) {
   var base = 'https://api.github.com/repos/' + pr.owner + '/' + pr.repo;
   var headers = { 'Accept': 'application/vnd.github+json' };
-  if (tokens.githubToken) headers['Authorization'] = 'Bearer ' + tokens.githubToken;
   return fetchJson(base + '/pulls/' + pr.number, headers).then(function (d) {
     return fetchAllGitHubComments(base + '/issues/' + pr.number + '/comments?per_page=100', headers).then(function (list) {
       return {
@@ -225,13 +219,9 @@ function fetchGitHubPr(pr, tokens) {
 
 // Bitbucket Cloud: PR description is a raw-markdown string (`description`,
 // also mirrored at `summary.raw`); comments carry markdown at `content.raw`.
-// Auth is Basic (username + app password), not bearer.
-function fetchBitbucketPr(pr, tokens) {
+function fetchBitbucketPr(pr) {
   var base = 'https://api.bitbucket.org/2.0/repositories/' + pr.owner + '/' + pr.repo;
   var headers = { 'Accept': 'application/json' };
-  if (tokens.bbUsername && tokens.bbAppPassword) {
-    headers['Authorization'] = basicAuthHeader(tokens.bbUsername, tokens.bbAppPassword);
-  }
   return fetchJson(base + '/pullrequests/' + pr.number, headers).then(function (d) {
     var body = d.description;
     if (!body && d.summary && d.summary.raw) body = d.summary.raw;
@@ -305,10 +295,10 @@ function composePrMarkdown(pr, data) {
   return parts.join('\n');
 }
 
-function fetchPrMarkdown(pr, tokens) {
+function fetchPrMarkdown(pr) {
   var fetcher = pr.host === 'github'
-    ? fetchGitHubPr(pr, tokens)
-    : fetchBitbucketPr(pr, tokens);
+    ? fetchGitHubPr(pr)
+    : fetchBitbucketPr(pr);
   return fetcher.then(function (data) {
     return composePrMarkdown(pr, data);
   });
@@ -362,9 +352,8 @@ function handlePrMenu(info, tab) {
   var pr = parsePrUrl(tab.url);
   if (!pr) return; // documentUrlPatterns should prevent this
 
-  chrome.storage.local.get(['mdPreviewConfig', 'mdApiTokens'], function (res) {
+  chrome.storage.local.get(['mdPreviewConfig'], function (res) {
     var mode = (res && res.mdPreviewConfig && res.mdPreviewConfig.mode) || 'popup';
-    var tokens = (res && res.mdApiTokens) || {};
 
     // Must run while the context-menu gesture is still active.
     if (mode === 'sidebar' && tab.windowId != null && chrome.sidePanel && chrome.sidePanel.open) {
@@ -373,7 +362,7 @@ function handlePrMenu(info, tab) {
       });
     }
 
-    fetchPrMarkdown(pr, tokens).then(function (md) {
+    fetchPrMarkdown(pr).then(function (md) {
       return routePrMarkdown(md, mode, tab);
     }).catch(function (err) {
       console.warn('[MD] PR fetch failed:', (err && err.message) || err);

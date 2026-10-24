@@ -1599,40 +1599,6 @@ body.embed .topbar { padding-right: 10px; }
 }
 .opt-field select:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); outline: none; }
 
-/* Text/password inputs (API tokens) — same treatment as selects. */
-.opt-field input[type="text"],
-.opt-field input[type="password"] {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 10px 14px;
-  font-size: 13px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg);
-  color: var(--text);
-  transition: border-color var(--dur), box-shadow var(--dur);
-}
-
-.opt-field input[type="text"]:hover,
-.opt-field input[type="password"]:hover {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
-}
-.opt-field input[type="text"]:focus-visible,
-.opt-field input[type="password"]:focus-visible {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--ring);
-  outline: none;
-}
-
-.opt-subheading {
-  margin: 6px 0 16px;
-  font-size: 14px;
-  font-weight: 650;
-  color: var(--text);
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--border);
-}
-
 .opt-hint {
   font-size: 12px;
   color: var(--text2);
