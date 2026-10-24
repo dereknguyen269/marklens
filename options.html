@@ -43,6 +43,13 @@
         </div>
         <div class="opt-card">
           <div class="opt-card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M6 9v12"/></svg>
+          </div>
+          <h3>Pull Request pages</h3>
+          <p>On GitHub or Bitbucket PR pages, right-click anywhere and choose <em>Preview PR as Markdown (raw)</em>. The real Markdown source of the description and comments is fetched and rendered. Private repos work when a token is saved in Settings.</p>
+        </div>
+        <div class="opt-card">
+          <div class="opt-card-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></svg>
           </div>
           <h3>Side Panel</h3>
@@ -50,7 +57,7 @@
         </div>
       </div>
 
-      <p class="opt-tip"><strong>Tip:</strong> Set your default display mode (popup vs sidebar) in Settings. Your drafts autosave locally — download them as Markdown, styled HTML, or PDF from the editor status bar, or press <kbd>Alt+Z</kbd> for Zen mode.</p>
+      <p class="opt-tip"><strong>Tip:</strong> Set your default display mode (popup, side panel, or fullscreen overlay) in Settings. Your drafts autosave locally — download them as Markdown, styled HTML, or PDF from the editor status bar, or press <kbd>Alt+Z</kbd> for Zen mode.</p>
     </section>
 
      <section id="opt-settings" class="opt-section" role="tabpanel">
@@ -63,6 +70,7 @@
           <select id="opt-mode">
             <option value="popup">Popup (floating on page)</option>
             <option value="sidebar">Side panel (docked right)</option>
+            <option value="overlay">Overlay (fullscreen editor on the page)</option>
           </select>
           <p class="opt-hint">Used when you right-click <em>Preview as Markdown</em> or <em>Convert HTML to Markdown</em>.</p>
         </div>
@@ -121,6 +129,23 @@
           </select>
         </div>
 
+        <h3 class="opt-subheading">GitHub / Bitbucket tokens (optional)</h3>
+        <div class="opt-field">
+          <label for="opt-gh-token">GitHub token</label>
+          <input type="password" id="opt-gh-token" placeholder="ghp_… or github_pat_…" autocomplete="off">
+          <p class="opt-hint">Fine-grained PAT with <strong>Pull requests: Read-only</strong>. Unlocks private-repo PRs on GitHub and raises the 60/hour anonymous rate limit.</p>
+        </div>
+        <div class="opt-field">
+          <label for="opt-bb-user">Bitbucket username</label>
+          <input type="text" id="opt-bb-user" placeholder="your Bitbucket username" autocomplete="off">
+        </div>
+        <div class="opt-field">
+          <label for="opt-bb-token">Bitbucket app password</label>
+          <input type="password" id="opt-bb-token" placeholder="app password with Pull requests: Read" autocomplete="off">
+          <p class="opt-hint">Create at bitbucket.org → Personal settings → App passwords. Used as Basic auth together with the username above for private-repo PRs.</p>
+        </div>
+        <p class="opt-hint">Tokens live only in this browser's extension storage (chrome.storage.local) and are sent only to api.github.com / api.bitbucket.org.</p>
+
         <div class="opt-actions">
           <button id="opt-save" class="opt-save-btn">Save Settings</button>
           <span id="opt-status" aria-live="polite" role="status"></span>
@@ -138,7 +163,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
           </div>
           <h3>How to use</h3>
-          <p>Select text on any page &rarr; right-click &rarr; choose <em>Preview as Markdown</em> or <em>Convert HTML to Markdown</em>. The result shows in a floating popup or side panel, depending on your default mode.</p>
+          <p>Select text on any page &rarr; right-click &rarr; choose <em>Preview as Markdown</em> or <em>Convert HTML to Markdown</em>. The result shows in a floating popup, the side panel, or a fullscreen overlay on the page, depending on your default mode. On GitHub or Bitbucket pull-request pages, right-click anywhere &rarr; <em>Preview PR as Markdown (raw)</em>. Press <kbd>Esc</kbd> to close the overlay.</p>
         </div>
         <div class="opt-card">
           <div class="opt-card-icon">

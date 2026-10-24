@@ -1,0 +1,6 @@
+# Local agent tooling (node_modules, package-lock, skill caches)
+.opencode/
+.claude/
+
+# Store upload packages — build artifacts, never tracked
+*.zip
