@@ -41,7 +41,16 @@
     loadMermaid(function (m) {
       if (!m) return;
       try { m.initialize({ startOnLoad: false, securityLevel: 'strict' }); } catch (e) {}
-      try { m.run({ nodes: container.querySelectorAll('.mermaid') }); } catch (e) {
+      // m.run() returns a promise: invalid diagrams reject asynchronously
+      // ({str, hash, error}) — a synchronous try/catch never sees them,
+      // which shows up as "Uncaught (in promise) #<Object>". suppressErrors
+      // makes mermaid render its error diagram instead of throwing.
+      try {
+        m.run({ nodes: container.querySelectorAll('.mermaid'), suppressErrors: true })
+          .catch(function (err) {
+            console.error('[MD] mermaid run error:', (err && (err.str || err.message)) || err);
+          });
+      } catch (e) {
         console.error('[MD] mermaid run error:', e);
       }
     });
@@ -49,6 +58,35 @@
 
   function hasHtmlTags(s) {
     return /<\/?[a-zA-Z][^<>]*>/.test(s || '');
+  }
+
+  // Score text for markdown-source signals. Selections rendered from HTML
+  // (PR descriptions, articles) never hit the strong unambiguous signals —
+  // task lists, fenced code, tables with literal pipes — while text copied
+  // from editors/code blocks does. Threshold tuned so plain prose stays out.
+  function looksLikeMarkdown(s) {
+    if (!s) return false;
+    var text = String(s);
+    var score = 0;
+    if (/(^|\n)#{1,6}\s+\S/.test(text)) score += 2;                        // ATX heading
+    if (/```|~~~/.test(text)) score += 6;                                  // fenced code (unambiguous source)
+    if (/(^|\n)\s*[-*+]\s+\[[ xX]\]\s/.test(text)) score += 6;             // task list (unambiguous source)
+    if (/(^|\n)\|.+\|/.test(text) && /(^|\n)\|[ :\-\|]+\|(\s|$)/.test(text)) score += 4; // table row + separator
+    if (/\[[^\]\n]+\]\([^)\n]+\)/.test(text)) score += 3;                  // md link
+    if (/(^|\n)\s*>\s+\S/.test(text)) score += 1;                          // blockquote
+    if (/\*\*[^*\n]+\*\*/.test(text) || /(^|\s)__[^_\n]+__(\s|$)/.test(text)) score += 1; // bold
+    if (/`[^`\n]+`/.test(text)) score += 1;                                // inline code
+    if (/(^|\n)\s*(?:[-*+]|\d+\.)\s+\S/.test(text)) score += 1;            // list item
+    return score >= 6;
+  }
+
+  // Plain text of cloned selection HTML (detached container → no resources load).
+  function htmlToText(html) {
+    try {
+      var d = document.createElement('div');
+      d.innerHTML = html;
+      return d.textContent || '';
+    } catch (e) { return String(html || ''); }
   }
 
   // Box already exists: the message + key listeners from the first injection
@@ -651,9 +689,12 @@
       }
       if (msg && msg.action === 'convertHtmlToMarkdown') {
         if (msg.html) {
-          // Tag-less selection (Markdown source, not HTML) — render it
-          // instead of echoing flattened source back.
-          if (msg.html.trim() && !hasHtmlTags(msg.html)) {
+          // Tag-less selection is Markdown source — render it directly.
+          // Tagged selections from highlight editors can still be Markdown
+          // source: when the text clearly scores as markdown, render as-is
+          // instead of running Turndown (which would mangle fences/tables).
+          if (msg.html.trim() &&
+              (!hasHtmlTags(msg.html) || looksLikeMarkdown(htmlToText(msg.html)))) {
             render(msg.html);
           } else {
             var md = htmlToMarkdown(msg.html);

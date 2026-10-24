@@ -8,8 +8,32 @@ const modeEl = document.getElementById('opt-mode');
 const themeEl = document.getElementById('opt-theme');
 const fontSizeEl = document.getElementById('opt-fontsize');
 const fontFamilyEl = document.getElementById('opt-fontfamily');
+const ghTokenEl = document.getElementById('opt-gh-token');
+const bbUserEl = document.getElementById('opt-bb-user');
+const bbTokenEl = document.getElementById('opt-bb-token');
 const saveBtn = document.getElementById('opt-save');
 const statusEl = document.getElementById('opt-status');
+
+// Tokens live under a separate key so DEFAULTS/mdPreviewConfig stays common
+// to content.js / sidepanel.js / popup.js. Optional — public PRs need none.
+function loadTokens() {
+  chrome.storage.local.get(['mdApiTokens'], function (res) {
+    var t = (res && res.mdApiTokens) || {};
+    ghTokenEl.value = t.githubToken || '';
+    bbUserEl.value = t.bbUsername || '';
+    bbTokenEl.value = t.bbAppPassword || '';
+  });
+}
+
+function saveTokens() {
+  chrome.storage.local.set({
+    mdApiTokens: {
+      githubToken: ghTokenEl.value.trim(),
+      bbUsername: bbUserEl.value.trim(),
+      bbAppPassword: bbTokenEl.value.trim()
+    }
+  });
+}
 
 function loadSettings() {
   globalThis.mdStorage.load(DEFAULTS, function (cfg) {
@@ -18,6 +42,7 @@ function loadSettings() {
     fontSizeEl.value = String(cfg.fontSize);
     fontFamilyEl.value = cfg.fontFamily;
   });
+  loadTokens();
 }
 
 function saveSettings(manual) {
@@ -28,6 +53,7 @@ function saveSettings(manual) {
     fontFamily: fontFamilyEl.value
   };
   globalThis.mdStorage.save(cfg);
+  saveTokens();
   statusEl.textContent = manual === false ? 'Saved ✓' : 'Saved!';
   setTimeout(function () { statusEl.textContent = ''; }, 2000);
 }
@@ -35,9 +61,17 @@ function saveSettings(manual) {
 saveBtn.addEventListener('click', function () { saveSettings(true); });
 
 // Autosave on change so edits can't be lost; the Save button stays as an
-// explicit confirmation for users who expect one.
+// explicit confirmation for users who expect one. Token fields autosave on
+// change only — attaching change + blur double-fires a write on every
+// tab-out (change already fires when a modified field loses focus, and the
+// Save button writes tokens itself).
 [modeEl, themeEl, fontSizeEl, fontFamilyEl].forEach(function (el) {
   if (el) el.addEventListener('change', function () { saveSettings(false); });
+});
+[ghTokenEl, bbUserEl, bbTokenEl].forEach(function (el) {
+  if (el) {
+    el.addEventListener('change', saveTokens);
+  }
 });
 
 // Version is injected at runtime so manifest/popup/options can't drift.

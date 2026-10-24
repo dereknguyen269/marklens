@@ -10,22 +10,32 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="title"><img src="icons/icon48.png" alt="" class="brand-logo">MarkLens</div>
-    <div class="view-toggle" role="tablist" aria-label="Layout">
-      <button id="tab-split" class="tab active" role="tab" aria-selected="true" data-view="split" title="Split view (Alt+1)">Split</button>
-      <button id="tab-edit" class="tab" role="tab" aria-selected="false" data-view="edit" title="Editor only (Alt+2)">Edit</button>
-      <button id="tab-preview" class="tab" role="tab" aria-selected="false" data-view="preview" title="Preview only (Alt+3)">Preview</button>
+    <div class="topbar-left">
+      <div class="title"><img src="icons/icon48.png" alt="" class="brand-logo"><span class="brand-text">MarkLens</span></div>
+      <span class="topbar-divider" aria-hidden="true"></span>
+      <div class="view-toggle" role="tablist" aria-label="Layout">
+        <button id="tab-split" class="tab active" role="tab" aria-selected="true" data-view="split" title="Split view (Alt+1)">Split</button>
+        <button id="tab-edit" class="tab" role="tab" aria-selected="false" data-view="edit" title="Editor only (Alt+2)">Edit</button>
+        <button id="tab-preview" class="tab" role="tab" aria-selected="false" data-view="preview" title="Preview only (Alt+3)">Preview</button>
+      </div>
     </div>
-    <div class="mode-toggle">
-      <button id="mode-md" class="mode-btn active" title="Editor content is Markdown">MD</button>
-      <button id="mode-html" class="mode-btn" title="Editor content is HTML — convert to Markdown">HTML</button>
+
+    <div class="topbar-right">
+      <div class="mode-toggle">
+        <button id="mode-md" class="mode-btn active" title="Editor content is Markdown">MD</button>
+        <button id="mode-html" class="mode-btn" title="Editor content is HTML — convert to Markdown">HTML</button>
+      </div>
+      <span class="topbar-divider" aria-hidden="true"></span>
+      <button id="zen-btn" class="icon-btn" title="Zen mode — distraction-free writing (Alt+Z)" aria-label="Zen mode">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+      </button>
+      <button id="settings-btn" class="icon-btn" title="Settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
+      <button id="overlay-close-btn" class="icon-btn overlay-close" title="Close overlay (Esc)" aria-label="Close overlay">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
     </div>
-    <button id="zen-btn" class="icon-btn" title="Zen mode — distraction-free writing (Alt+Z)" aria-label="Zen mode">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
-    </button>
-    <button id="settings-btn" class="icon-btn" title="Settings" aria-label="Settings">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
-    </button>
   </header>
 
   <div class="toolsbar">
@@ -121,55 +131,85 @@
     <aside id="outline-panel" class="docs-panel" hidden>
       <div class="docs-head">
         <strong>Outline</strong>
+        <span id="outline-count" class="panel-count"></span>
         <div class="docs-head-actions">
-          <button id="outline-toc-btn" title="Insert or update a TOC in the document" aria-label="Insert TOC">TOC</button>
+          <button id="outline-toc-btn" class="panel-text-btn" title="Insert or update a table of contents" aria-label="Insert or update a table of contents">TOC</button>
           <button id="outline-close-btn" title="Close outline" aria-label="Close outline">✕</button>
         </div>
       </div>
-      <label style="display:flex;align-items:center;gap:6px;padding:6px 12px;font-size:12px;color:var(--text2);border-bottom:1px solid var(--border);">
+      <label class="switch-row">
+        <span>Preview table of contents</span>
         <input type="checkbox" id="outline-preview-toc">
-        Preview table of contents
+        <span class="switch" aria-hidden="true"></span>
       </label>
-      <ul id="outline-list" class="docs-list"></ul>
+      <ul id="outline-list" class="docs-list outline-list" aria-label="Document headings"></ul>
     </aside>
     <aside id="themes-panel" class="docs-panel" hidden>
       <div class="docs-head">
         <strong>Custom themes</strong>
+        <span id="themes-count" class="panel-count"></span>
         <div class="docs-head-actions">
           <button id="themes-close-btn" title="Close" aria-label="Close">✕</button>
         </div>
       </div>
-      <div style="padding:8px 10px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:6px;">
-        <input id="theme-name" class="docs-search" style="margin:0;" type="text" placeholder="Theme name">
-        <select id="theme-base" class="docs-search" style="margin:0;">
-          <option value="light">Base: Light</option>
-          <option value="dark">Base: Dark</option>
-        </select>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-          <label style="font-size:11px;color:var(--text2);">Background<input id="theme-bg" type="color" value="#ffffff"></label>
-          <label style="font-size:11px;color:var(--text2);">Surface<input id="theme-surface" type="color" value="#f7f8fa"></label>
-          <label style="font-size:11px;color:var(--text2);">Border<input id="theme-border" type="color" value="#e3e6ea"></label>
-          <label style="font-size:11px;color:var(--text2);">Text<input id="theme-text" type="color" value="#1f2328"></label>
-          <label style="font-size:11px;color:var(--text2);">Secondary<input id="theme-text2" type="color" value="#656d76"></label>
-          <label style="font-size:11px;color:var(--text2);">Accent<input id="theme-accent" type="color" value="#4f46e5"></label>
-          <label style="font-size:11px;color:var(--text2);">Code bg<input id="theme-codebg" type="color" value="#f0f2f5"></label>
-          <label style="font-size:11px;color:var(--text2);">Highlight.js
-            <select id="theme-hl" class="docs-search" style="margin:0;padding:2px;">
-              <option value="light">light</option>
-              <option value="dark">dark</option>
+
+      <div class="theme-builder">
+        <label class="field">
+          <span class="field-label">Theme name</span>
+          <input id="theme-name" class="field-input" type="text" placeholder="e.g. Ocean dusk" autocomplete="off">
+        </label>
+
+        <div class="field-row">
+          <label class="field">
+            <span class="field-label">Base</span>
+            <select id="theme-base" class="field-input">
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
+          </label>
+          <label class="field">
+            <span class="field-label">Code style</span>
+            <select id="theme-hl" class="field-input">
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
             </select>
           </label>
         </div>
-        <div style="display:flex;gap:6px;">
-          <button id="theme-save-btn" class="docs-head-actions button" style="flex:1;padding:6px;border:1px solid var(--border);border-radius:6px;background:var(--accent);color:#fff;">Save theme</button>
+
+        <div id="theme-preview" class="theme-preview" aria-hidden="true">
+          <span class="tp-swatch"></span>
+          <span class="tp-copy"><i class="tp-title"></i><i class="tp-line"></i></span>
+          <span class="tp-btn">Aa</span>
         </div>
-        <div style="display:flex;gap:6px;">
-          <button id="theme-import-btn" style="flex:1;padding:6px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);">Import</button>
-          <button id="theme-export-btn" style="flex:1;padding:6px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);">Export</button>
+
+        <div class="theme-section-head">
+          <span class="field-label">Colors</span>
+          <button id="theme-reset-btn" class="theme-reset" type="button" title="Load the selected base palette">Reset</button>
+        </div>
+        <div class="theme-colors">
+          <label class="color-field" title="Background color"><span>Background</span><input id="theme-bg" type="color" value="#ffffff"><code class="cf-hex">#ffffff</code></label>
+          <label class="color-field" title="Surface color"><span>Surface</span><input id="theme-surface" type="color" value="#f7f8fa"><code class="cf-hex">#f7f8fa</code></label>
+          <label class="color-field" title="Border color"><span>Border</span><input id="theme-border" type="color" value="#e3e6ea"><code class="cf-hex">#e3e6ea</code></label>
+          <label class="color-field" title="Body text color"><span>Text</span><input id="theme-text" type="color" value="#1f2328"><code class="cf-hex">#1f2328</code></label>
+          <label class="color-field" title="Secondary text color"><span>Secondary</span><input id="theme-text2" type="color" value="#656d76"><code class="cf-hex">#656d76</code></label>
+          <label class="color-field" title="Accent color"><span>Accent</span><input id="theme-accent" type="color" value="#4f46e5"><code class="cf-hex">#4f46e5</code></label>
+          <label class="color-field" title="Inline code background"><span>Code bg</span><input id="theme-codebg" type="color" value="#f0f2f5"><code class="cf-hex">#f0f2f5</code></label>
+        </div>
+
+        <div id="theme-contrast" class="theme-contrast" role="status" aria-live="polite" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+          <span id="theme-contrast-text"></span>
+        </div>
+
+        <button id="theme-save-btn" class="theme-save" type="button">Save theme</button>
+        <div class="theme-actions">
+          <button id="theme-import-btn" class="theme-btn" type="button" title="Import themes from a JSON file">Import</button>
+          <button id="theme-export-btn" class="theme-btn" type="button" title="Export all custom themes as JSON">Export</button>
         </div>
         <input id="theme-import-file" type="file" accept="application/json" hidden>
       </div>
-      <ul id="themes-list" class="docs-list"></ul>
+
+      <ul id="themes-list" class="docs-list theme-list" aria-label="Custom themes"></ul>
     </aside>
     <aside id="lint-panel" class="docs-panel" hidden>
       <div class="docs-head">
@@ -206,23 +246,76 @@ Select text on a page → right-click → “Preview as Markdown”"></textarea>
   <footer class="statusbar">
     <div class="status-left">
       <span id="status" role="status">Live</span>
+      <span class="status-sep" aria-hidden="true"></span>
       <span id="counts" title="Word and character count"></span>
       <span id="draft-note" title="Draft autosaves locally in your browser"></span>
     </div>
-    <div class="status-actions">
-      <button id="docs-btn" title="Document library" aria-live="polite">Docs</button>
-      <button id="snaps-btn" title="Version snapshots" aria-live="polite">Snaps</button>
-      <button id="outline-btn" title="Outline and table of contents" aria-live="polite">Outline</button>
-      <button id="themes-btn" title="Custom themes" aria-live="polite">Themes</button>
-      <button id="lint-btn" title="Markdown lint" aria-live="polite">Lint</button>
-      <button id="templates-btn" title="Templates and snippets" aria-live="polite">Templates</button>
-      <button id="dl-md-btn" title="Download as Markdown file" aria-live="polite">↓ MD</button>
-      <button id="dl-html-btn" title="Download as styled HTML file" aria-live="polite">↓ HTML</button>
-      <button id="print-btn" title="Print or save as PDF" aria-live="polite">PDF</button>
-      <button id="clear-btn" title="Clear editor and preview" aria-live="polite">Clear</button>
-      <button id="copy-btn" title="Copy rendered HTML (Ctrl+Enter / Ctrl+S)" aria-live="polite">Copy</button>
-      <button id="copy-rich-btn" title="Copy rendered HTML to clipboard" aria-live="polite">Rich</button>
-      <button id="dl-sel-btn" title="Download selected text (or whole doc)" aria-live="polite">Sel</button>
+
+    <div class="status-actions" role="toolbar" aria-label="Editor actions">
+      <div class="status-group" role="group" aria-label="Panels">
+        <button id="docs-btn" class="status-btn" type="button" aria-pressed="false" title="Document library" aria-label="Document library">
+          <svg class="sb-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+          <span class="sb-label">Docs</span>
+        </button>
+        <button id="snaps-btn" class="status-btn" type="button" aria-pressed="false" title="Version snapshots" aria-label="Version snapshots">
+          <svg class="sb-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>
+          <span class="sb-label">Snaps</span>
+        </button>
+        <button id="outline-btn" class="status-btn" type="button" aria-pressed="false" title="Outline and table of contents" aria-label="Outline">
+          <svg class="sb-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg>
+          <span class="sb-label">Outline</span>
+        </button>
+        <button id="themes-btn" class="status-btn" type="button" aria-pressed="false" title="Custom themes" aria-label="Custom themes">
+          <svg class="sb-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="13.5" cy="6.5" r=".6" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".6" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".6" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".6" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.9 0 1.6-.7 1.6-1.6 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.6 1.6-1.6H16c3.3 0 6-2.7 6-6 0-5.5-4.5-10-10-10z"/></svg>
+          <span class="sb-label">Themes</span>
+        </button>
+        <button id="lint-btn" class="status-btn" type="button" aria-pressed="false" title="Markdown lint" aria-label="Markdown lint">
+          <svg class="sb-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          <span class="sb-label">Lint</span>
+        </button>
+        <button id="templates-btn" class="status-btn" type="button" aria-pressed="false" title="Templates and snippets" aria-label="Templates and snippets">
+          <svg class="sb-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+          <span class="sb-label">Templates</span>
+        </button>
+      </div>
+
+      <span class="status-divider" aria-hidden="true"></span>
+
+      <div class="status-group" role="group" aria-label="Export">
+        <button id="dl-md-btn" class="status-btn" type="button" title="Download as Markdown file" aria-label="Download as Markdown">
+          <svg class="sb-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+          <span class="sb-label">MD</span>
+        </button>
+        <button id="dl-html-btn" class="status-btn" type="button" title="Download as styled HTML file" aria-label="Download as HTML">
+          <svg class="sb-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M16 18l6-6-6-6"/><path d="M8 6l-6 6 6 6"/></svg>
+          <span class="sb-label">HTML</span>
+        </button>
+        <button id="print-btn" class="status-btn" type="button" title="Print or save as PDF" aria-label="Print or save as PDF">
+          <svg class="sb-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>
+          <span class="sb-label">PDF</span>
+        </button>
+      </div>
+
+      <span class="status-divider" aria-hidden="true"></span>
+
+      <div class="status-group" role="group" aria-label="Editing">
+        <button id="clear-btn" class="status-btn" type="button" title="Clear editor and preview" aria-label="Clear editor and preview">
+          <svg class="sb-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          <span class="sb-label">Clear</span>
+        </button>
+        <button id="copy-btn" class="status-btn status-primary" type="button" title="Copy rendered HTML (Ctrl+Enter / Ctrl+S)" aria-label="Copy rendered HTML">
+          <svg class="sb-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          <span class="sb-label" id="copy-btn-label">Copy</span>
+        </button>
+        <button id="copy-rich-btn" class="status-btn" type="button" title="Copy rendered HTML to clipboard as rich text" aria-label="Copy rich text">
+          <svg class="sb-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
+          <span class="sb-label">Rich</span>
+        </button>
+        <button id="dl-sel-btn" class="status-btn" type="button" title="Download selected text (or the whole document)" aria-label="Download selection">
+          <svg class="sb-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg>
+          <span class="sb-label">Sel</span>
+        </button>
+      </div>
     </div>
   </footer>
 
@@ -245,6 +338,34 @@ Select text on a page → right-click → “Preview as Markdown”"></textarea>
       </div>
       <div id="diff-meta" class="diff-meta"></div>
       <div id="diff-body" class="diff-body"></div>
+    </div>
+  </div>
+
+  <div id="confirm-modal" class="confirm-modal" hidden>
+    <div class="confirm-card" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-message">
+      <div id="confirm-icon" class="confirm-icon" aria-hidden="true"></div>
+      <div class="confirm-copy">
+        <h2 id="confirm-title" class="confirm-title">Are you sure?</h2>
+        <p id="confirm-message" class="confirm-message"></p>
+      </div>
+      <div class="confirm-actions">
+        <button type="button" id="confirm-cancel" class="confirm-btn">Cancel</button>
+        <button type="button" id="confirm-ok" class="confirm-btn confirm-primary">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="prompt-modal" class="confirm-modal" hidden>
+    <div class="confirm-card" role="dialog" aria-modal="true" aria-labelledby="prompt-title">
+      <div id="prompt-icon" class="confirm-icon" aria-hidden="true"></div>
+      <div class="confirm-copy">
+        <h2 id="prompt-title" class="confirm-title">Rename</h2>
+      </div>
+      <input id="prompt-input" class="confirm-input" type="text" autocomplete="off" spellcheck="false">
+      <div class="confirm-actions">
+        <button type="button" id="prompt-cancel" class="confirm-btn">Cancel</button>
+        <button type="button" id="prompt-ok" class="confirm-btn confirm-primary">Save</button>
+      </div>
     </div>
   </div>
 

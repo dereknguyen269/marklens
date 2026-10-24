@@ -13,6 +13,12 @@ var DEFAULTS = {
 
 var config = {};
 
+// Embedded overlay mode: sidepanel.html?embed=1 is iframed fullscreen by
+// js/overlay.js. Layout stays identical; this only reveals the close button
+// and routes Esc/close back to the host page.
+var EMBED = window.parent !== window && /[?&]embed=1(?:&|$)/.test(location.search);
+if (EMBED) document.body.classList.add('embed');
+
 var SIDEPANEL_THEMES = globalThis.MD_SIDEPANEL_THEMES;
 
 function safeHtml(html) {
@@ -36,6 +42,7 @@ const workspace = document.getElementById('workspace');
 const status = document.getElementById('status');
 const countsEl = document.getElementById('counts');
 const copyBtn = document.getElementById('copy-btn');
+const copyBtnLabel = document.getElementById('copy-btn-label');
 const clearBtn = document.getElementById('clear-btn');
 const dlMdBtn = document.getElementById('dl-md-btn');
 const dlHtmlBtn = document.getElementById('dl-html-btn');
@@ -43,6 +50,7 @@ const printBtn = document.getElementById('print-btn');
 const zenBtn = document.getElementById('zen-btn');
 const draftNote = document.getElementById('draft-note');
 const settingsBtn = document.getElementById('settings-btn');
+const overlayCloseBtn = document.getElementById('overlay-close-btn');
 const modeMdBtn = document.getElementById('mode-md');
 const modeHtmlBtn = document.getElementById('mode-html');
 const toolTheme = document.getElementById('tool-theme');
@@ -92,6 +100,122 @@ function setPlaceholder(mode) {
   else if (editor) editor.placeholder = text;
 }
 
+// The primary Copy button carries an icon, so its changing label ("Copy HTML"
+// / "Copy MD" / "Copied!") is updated through the span instead of textContent
+// (which would destroy the SVG).
+function setCopyLabel(text) {
+  if (copyBtnLabel) copyBtnLabel.textContent = text;
+  else if (copyBtn) copyBtn.textContent = text;
+}
+
+// ── Prompt dialog (rename documents, snapshot labels) ────────────────────
+// Promise-based replacement for window.prompt so text-entry dialogs match
+// mdConfirm. Resolves the input's value on Save, or null on Cancel / Esc /
+// backdrop click (null means "do nothing" to callers).
+var promptState = { resolve: null, restoreFocus: null };
+
+var PROMPT_ICON = '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>';
+
+function mdPrompt(opts) {
+  opts = opts || {};
+  var modal = document.getElementById('prompt-modal');
+  if (!modal) return Promise.resolve(window.prompt(opts.title || '', opts.value || ''));
+
+  // Only one dialog at a time; close a prompt or confirm that is already up.
+  if (promptState.resolve) closePrompt(null);
+  if (confirmState.resolve) closeConfirm(false);
+
+  var titleEl = document.getElementById('prompt-title');
+  var input = document.getElementById('prompt-input');
+  var iconEl = document.getElementById('prompt-icon');
+  var okBtn = document.getElementById('prompt-ok');
+  var cancelBtn = document.getElementById('prompt-cancel');
+
+  if (titleEl) titleEl.textContent = opts.title || 'Rename';
+  if (iconEl) iconEl.innerHTML = (opts.icon && CONFIRM_ICONS[opts.icon]) || PROMPT_ICON;
+  if (input) {
+    input.value = opts.value != null ? String(opts.value) : '';
+    input.placeholder = opts.placeholder || '';
+  }
+  if (okBtn) okBtn.textContent = opts.confirmLabel || 'Save';
+  if (cancelBtn) cancelBtn.textContent = opts.cancelLabel || 'Cancel';
+
+  modal.setAttribute('data-tone', 'accent');
+  modal.removeAttribute('hidden');
+  promptState.restoreFocus = document.activeElement;
+
+  return new Promise(function (resolve) {
+    promptState.resolve = resolve;
+    setTimeout(function () {
+      if (modal.hasAttribute('hidden')) return;
+      if (input) { input.focus(); input.select(); }
+    }, 0);
+  });
+}
+
+function closePrompt(result) {
+  var modal = document.getElementById('prompt-modal');
+  var input = document.getElementById('prompt-input');
+  if (!modal || modal.hasAttribute('hidden')) return;
+  modal.setAttribute('hidden', '');
+  var resolve = promptState.resolve;
+  var restore = promptState.restoreFocus;
+  promptState.resolve = null;
+  promptState.restoreFocus = null;
+  if (resolve) resolve(result === null ? null : (input ? input.value : result));
+  if (restore && restore.focus && restore !== document.body) {
+    try { restore.focus(); } catch (e) {}
+  }
+}
+
+(function initPromptDialog() {
+  var modal = document.getElementById('prompt-modal');
+  if (!modal) return;
+  var input = document.getElementById('prompt-input');
+  var okBtn = document.getElementById('prompt-ok');
+  var cancelBtn = document.getElementById('prompt-cancel');
+  var traps = [input, cancelBtn, okBtn].filter(Boolean);
+
+  if (okBtn) okBtn.addEventListener('click', function () { closePrompt(true); });
+  if (cancelBtn) cancelBtn.addEventListener('click', function () { closePrompt(null); });
+
+  modal.addEventListener('mousedown', function (e) {
+    if (e.target === modal) closePrompt(null);
+  });
+
+  modal.addEventListener('keydown', function (e) {
+    // Modal semantics: keep editor/global shortcuts from firing behind it.
+    e.stopPropagation();
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      closePrompt(null);
+    } else if (e.key === 'Enter' && document.activeElement !== cancelBtn) {
+      e.preventDefault();
+      closePrompt(true);
+    } else if (e.key === 'Tab') {
+      if (!traps.length) return;
+      var first = traps[0];
+      var last = traps[traps.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+  });
+})();
+
+// Highlight a status-bar panel toggle while its panel is open.
+function setPanelBtnActive(id, on) {
+  var btn = document.getElementById(id);
+  if (!btn) return;
+  btn.classList.toggle('active', !!on);
+  btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+}
+
 function setKeymap(name, silent) {
   var okVim = !!(globalThis.CodeMirror && globalThis.CodeMirror.Vim);
   config.keymap = (name === 'vim' && okVim) ? 'vim' : 'default';
@@ -124,6 +248,9 @@ function initEditor() {
       if (silentSet) return;
       scheduleRender();
       saveDraft(false);
+    });
+    cm.on('cursorActivity', function () {
+      if (cm) syncOutlineActive(cm.getCursor().line + 1);
     });
     if (cmScroll && previewPane) {
       cmScroll.addEventListener('scroll', function () {
@@ -315,6 +442,113 @@ function applyPendingHtmlToNewDoc(html) {
   });
 }
 
+// ── Confirm dialog ───────────────────────────────────────────────────────
+// Promise-based replacement for window.confirm so destructive actions match
+// the active theme (and work inside the overlay iframe). Resolves true when
+// confirmed; false on Cancel, Esc, or a backdrop click.
+var confirmState = { resolve: null, restoreFocus: null };
+
+var CONFIRM_ICONS = {
+  danger: '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>',
+  warning: '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>',
+  accent: '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>'
+};
+
+function closeConfirm(result) {
+  var modal = document.getElementById('confirm-modal');
+  if (!modal || modal.hasAttribute('hidden')) return;
+  modal.setAttribute('hidden', '');
+  var resolve = confirmState.resolve;
+  var restore = confirmState.restoreFocus;
+  confirmState.resolve = null;
+  confirmState.restoreFocus = null;
+  if (resolve) resolve(!!result);
+  if (restore && restore.focus && restore !== document.body) {
+    try { restore.focus(); } catch (e) {}
+  }
+}
+
+function mdConfirm(opts) {
+  opts = opts || {};
+  var modal = document.getElementById('confirm-modal');
+  if (!modal) return Promise.resolve(window.confirm(opts.message || opts.title || 'Are you sure?'));
+
+  // Only one dialog at a time; close a confirm or prompt that is already up.
+  if (confirmState.resolve) closeConfirm(false);
+  if (promptState.resolve) closePrompt(null);
+
+  var titleEl = document.getElementById('confirm-title');
+  var msgEl = document.getElementById('confirm-message');
+  var iconEl = document.getElementById('confirm-icon');
+  var okBtn = document.getElementById('confirm-ok');
+  var cancelBtn = document.getElementById('confirm-cancel');
+  var tone = opts.tone || 'warning';
+
+  if (titleEl) titleEl.textContent = opts.title || 'Are you sure?';
+  if (msgEl) msgEl.textContent = opts.message || '';
+  if (okBtn) {
+    okBtn.textContent = opts.confirmLabel || 'Confirm';
+    okBtn.className = 'confirm-btn confirm-primary';
+  }
+  if (cancelBtn) cancelBtn.textContent = opts.cancelLabel || 'Cancel';
+  if (iconEl) iconEl.innerHTML = CONFIRM_ICONS[tone] || CONFIRM_ICONS.warning;
+
+  modal.setAttribute('data-tone', tone);
+  modal.removeAttribute('hidden');
+  confirmState.restoreFocus = document.activeElement;
+
+  return new Promise(function (resolve) {
+    confirmState.resolve = resolve;
+    setTimeout(function () {
+      if (modal.hasAttribute('hidden')) return;
+      // Destructive dialogs start on Cancel so Enter can't delete by reflex.
+      var target = tone === 'danger' ? cancelBtn : okBtn;
+      if (target) target.focus();
+    }, 0);
+  });
+}
+
+(function initConfirmDialog() {
+  var modal = document.getElementById('confirm-modal');
+  if (!modal) return;
+  var okBtn = document.getElementById('confirm-ok');
+  var cancelBtn = document.getElementById('confirm-cancel');
+
+  if (okBtn) okBtn.addEventListener('click', function () { closeConfirm(true); });
+  if (cancelBtn) cancelBtn.addEventListener('click', function () { closeConfirm(false); });
+
+  modal.addEventListener('mousedown', function (e) {
+    if (e.target === modal) closeConfirm(false);
+  });
+
+  modal.addEventListener('keydown', function (e) {
+    // Modal semantics: keep editor/global shortcuts from firing behind it.
+    e.stopPropagation();
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      closeConfirm(false);
+    } else if (e.key === 'Enter') {
+      // Let Enter activate a focused Cancel button natively.
+      if (document.activeElement === cancelBtn) return;
+      e.preventDefault();
+      closeConfirm(true);
+    } else if (e.key === 'Tab') {
+      var buttons = modal.querySelectorAll('.confirm-btn');
+      if (!buttons.length) return;
+      var first = buttons[0];
+      var last = buttons[buttons.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+  });
+})();
+
 function renderDocList() {
   var list = document.getElementById('docs-list');
   if (!list || !globalThis.mdDB) return;
@@ -347,13 +581,23 @@ function renderDocList() {
       del.title = 'Delete';
       del.addEventListener('click', function (e) {
         e.stopPropagation();
-        if (confirm('Delete "' + (d.title || 'Untitled') + '"?')) deleteDoc(d.id);
+        mdConfirm({
+          title: 'Delete document?',
+          message: '“' + (d.title || 'Untitled') + '” will be permanently deleted. This cannot be undone.',
+          confirmLabel: 'Delete',
+          tone: 'danger'
+        }).then(function (ok) { if (ok) deleteDoc(d.id); });
       });
       li.appendChild(del);
       li.addEventListener('click', function () { openDoc(d.id); });
       li.addEventListener('dblclick', function () {
-        var nt = prompt('Rename document:', d.title || 'Untitled');
-        if (nt !== null) renameDoc(d.id, nt);
+        mdPrompt({
+          title: 'Rename document',
+          value: d.title || 'Untitled',
+          confirmLabel: 'Rename'
+        }).then(function (nt) {
+          if (nt !== null) renameDoc(d.id, nt);
+        });
       });
       list.appendChild(li);
     });
@@ -415,12 +659,19 @@ function deleteSnapshot(id, cb) {
 
 function restoreSnapshot(snap) {
   if (!snap) return;
-  if (!confirm('Restore this snapshot? Unsaved changes will be overwritten.')) return;
-  setText(snap.content || '');
-  setInputMode(snap.inputMode === 'html' ? 'html' : 'md', true);
-  renderNow();
-  saveCurrentDoc(true);
-  if (status) { status.textContent = 'Restored snapshot'; status.classList.remove('error'); }
+  mdConfirm({
+    title: 'Restore this snapshot?',
+    message: 'Your current unsaved changes will be overwritten by this snapshot.',
+    confirmLabel: 'Restore',
+    tone: 'accent'
+  }).then(function (ok) {
+    if (!ok) return;
+    setText(snap.content || '');
+    setInputMode(snap.inputMode === 'html' ? 'html' : 'md', true);
+    renderNow();
+    saveCurrentDoc(true);
+    if (status) { status.textContent = 'Restored snapshot'; status.classList.remove('error'); }
+  });
 }
 
 function diffLines(oldText, newText) {
@@ -551,7 +802,12 @@ function renderSnapList() {
       delBtn.title = 'Delete snapshot';
       delBtn.addEventListener('click', function (e) {
         e.stopPropagation();
-        if (confirm('Delete snapshot "' + (s.label || 'Snapshot') + '"?')) deleteSnapshot(s.id);
+        mdConfirm({
+          title: 'Delete snapshot?',
+          message: '“' + (s.label || 'Snapshot') + '” will be permanently deleted.',
+          confirmLabel: 'Delete',
+          tone: 'danger'
+        }).then(function (ok) { if (ok) deleteSnapshot(s.id); });
       });
       act.appendChild(delBtn);
       li.appendChild(act);
@@ -563,6 +819,7 @@ function renderSnapList() {
 // Outline / TOC (Phase 3)
 var outlineBtn = null;
 var outlinePanel = null;
+var OUTLINE_EMPTY_ICON = '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg>';
 function slugifyHeading(text) {
   return String(text == null ? '' : text).toLowerCase().trim()
     .replace(/[^a-z0-9\s-]/g, '')
@@ -606,32 +863,65 @@ function jumpToEditorLine(line) {
 function updateOutline() {
   var list = document.getElementById('outline-list');
   if (!list) return;
+  var countEl = document.getElementById('outline-count');
   var items = parseOutline(getText());
   list.innerHTML = '';
+  if (countEl) countEl.textContent = items.length ? String(items.length) : '';
   if (!items.length) {
     var empty = document.createElement('li');
-    empty.className = 'docs-empty';
-    empty.textContent = 'No headings yet.';
+    empty.className = 'panel-empty';
+    empty.innerHTML = OUTLINE_EMPTY_ICON
+      + '<strong>No headings yet</strong>'
+      + '<span>Add # headings to build an outline.</span>';
     list.appendChild(empty);
     return;
   }
   items.forEach(function (h) {
     var li = document.createElement('li');
-    li.className = 'docs-item';
-    li.style.paddingLeft = (6 + (h.level - 1) * 12) + 'px';
+    li.className = 'outline-item outline-level-' + h.level;
+    li.setAttribute('data-line', String(h.line));
+    li.setAttribute('role', 'button');
+    li.setAttribute('tabindex', '0');
+    li.setAttribute('aria-label', 'Jump to ' + h.text);
+    li.style.setProperty('--indent', ((h.level - 1) * 10) + 'px');
+    li.title = 'Jump to line ' + h.line;
     var lvl = document.createElement('span');
-    lvl.style.fontSize = '10px';
-    lvl.style.color = 'var(--text2)';
-    lvl.style.marginRight = '6px';
+    lvl.className = 'outline-badge';
     lvl.textContent = 'H' + h.level;
     li.appendChild(lvl);
     var title = document.createElement('span');
     title.className = 'title';
     title.textContent = h.text;
     li.appendChild(title);
+    var num = document.createElement('span');
+    num.className = 'outline-line';
+    num.textContent = h.line;
+    li.appendChild(num);
     li.addEventListener('click', function () { jumpToEditorLine(h.line); });
+    li.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        jumpToEditorLine(h.line);
+      }
+    });
     list.appendChild(li);
   });
+  if (cm) syncOutlineActive(cm.getCursor().line + 1);
+}
+
+function syncOutlineActive(line) {
+  var list = document.getElementById('outline-list');
+  if (!list) return;
+  var items = list.querySelectorAll('.outline-item');
+  var active = null;
+  for (var i = 0; i < items.length; i++) {
+    var l = parseInt(items[i].getAttribute('data-line'), 10);
+    if (!isNaN(l) && l <= line) active = items[i];
+    else break;
+  }
+  for (i = 0; i < items.length; i++) {
+    items[i].classList.toggle('active', items[i] === active);
+  }
 }
 function ensureHeadingIds() {
   if (!preview) return;
@@ -699,6 +989,7 @@ function setOutlineOpen(on) {
   if (!outlinePanel) return;
   if (on) outlinePanel.removeAttribute('hidden');
   else outlinePanel.setAttribute('hidden', '');
+  setPanelBtnActive('outline-btn', on);
   if (on) updateOutline();
 }
 
@@ -751,71 +1042,292 @@ function colorValue(theme, key, fallback) {
   return fallback;
 }
 
+// Live palette strip in the theme builder.
+var THEME_COLOR_KEYS = {
+  'theme-bg': '--bg',
+  'theme-surface': '--surface',
+  'theme-border': '--border',
+  'theme-text': '--text',
+  'theme-text2': '--text2',
+  'theme-accent': '--accent',
+  'theme-codebg': '--code-bg'
+};
+// Applying a theme previews its palette in the builder, but never wipes
+// colors the user has already started editing.
+var themeDraftDirty = false;
+
+function parseHexColor(hex) {
+  var h = String(hex || '').trim().replace(/^#/, '');
+  if (h.length === 3) h = h.charAt(0) + h.charAt(0) + h.charAt(1) + h.charAt(1) + h.charAt(2) + h.charAt(2);
+  if (!/^[0-9a-f]{6}$/i.test(h)) return null;
+  return {
+    r: parseInt(h.slice(0, 2), 16),
+    g: parseInt(h.slice(2, 4), 16),
+    b: parseInt(h.slice(4, 6), 16)
+  };
+}
+
+function colorLuminance(rgb) {
+  var c = [rgb.r, rgb.g, rgb.b].map(function (v) {
+    v = v / 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+}
+
+function contrastRatio(a, b) {
+  var ca = parseHexColor(a);
+  var cb = parseHexColor(b);
+  if (!ca || !cb) return 21;
+  var la = colorLuminance(ca);
+  var lb = colorLuminance(cb);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+
+function onAccentColor(accent) {
+  return contrastRatio(accent, '#111827') > contrastRatio(accent, '#ffffff') ? '#111827' : '#ffffff';
+}
+
+function markContrastField(id, low) {
+  var field = document.getElementById(id);
+  var wrap = field && field.closest ? field.closest('.color-field') : null;
+  if (wrap) wrap.classList.toggle('low-contrast', low);
+}
+
+function checkThemeContrast() {
+  var box = document.getElementById('theme-contrast');
+  var label = document.getElementById('theme-contrast-text');
+  if (!box || !label) return;
+  var val = function (id) {
+    var el = document.getElementById(id);
+    return el ? el.value : '';
+  };
+  var bg = val('theme-bg');
+  var surface = val('theme-surface');
+  var text = val('theme-text');
+  var text2 = val('theme-text2');
+  var accent = val('theme-accent');
+  var lowText = contrastRatio(text, bg) < 4.5 || contrastRatio(text, surface) < 4.5;
+  var lowText2 = contrastRatio(text2, bg) < 3 || contrastRatio(text2, surface) < 3;
+  var lowAccent = contrastRatio(accent, bg) < 3 || contrastRatio(accent, surface) < 3;
+  markContrastField('theme-text', lowText);
+  markContrastField('theme-text2', lowText2);
+  markContrastField('theme-accent', lowAccent);
+  var issues = [];
+  if (lowText) issues.push('body text');
+  if (lowText2) issues.push('secondary text');
+  if (lowAccent) issues.push('accent');
+  if (!issues.length) {
+    box.hidden = true;
+    return;
+  }
+  box.hidden = false;
+  label.textContent = 'Low contrast: ' + issues.join(', ') + ' may be hard to read. Adjust the marked swatches.';
+}
+
+function updateThemePreview() {
+  var p = document.getElementById('theme-preview');
+  if (!p) return;
+  var map = {
+    '--tp-bg': 'theme-bg',
+    '--tp-surface': 'theme-surface',
+    '--tp-border': 'theme-border',
+    '--tp-text': 'theme-text',
+    '--tp-text2': 'theme-text2',
+    '--tp-accent': 'theme-accent'
+  };
+  Object.keys(map).forEach(function (prop) {
+    var el = document.getElementById(map[prop]);
+    if (el) p.style.setProperty(prop, el.value);
+  });
+  var accentInput = document.getElementById('theme-accent');
+  if (accentInput) p.style.setProperty('--tp-on-accent', onAccentColor(accentInput.value));
+  syncThemeHexCodes();
+  checkThemeContrast();
+}
+
+function syncThemeHexCodes() {
+  Object.keys(THEME_COLOR_KEYS).forEach(function (id) {
+    var input = document.getElementById(id);
+    var chip = input && input.closest ? input.closest('.color-field') : null;
+    var hex = chip && chip.querySelector ? chip.querySelector('.cf-hex') : null;
+    if (hex) hex.textContent = String(input.value || '').toLowerCase();
+  });
+}
+
+function setThemeColorInputs(vars) {
+  if (!vars) return false;
+  var ids = Object.keys(THEME_COLOR_KEYS);
+  var complete = ids.every(function (id) {
+    return /^#[0-9a-f]{6}$/i.test(vars[THEME_COLOR_KEYS[id]] || '');
+  });
+  if (!complete) return false;
+  ids.forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.value = vars[THEME_COLOR_KEYS[id]];
+  });
+  updateThemePreview();
+  return true;
+}
+
+function loadThemePalette(theme) {
+  if (!theme || !setThemeColorInputs(theme.vars)) return;
+  var base = document.getElementById('theme-base');
+  if (base) base.value = themeBaseOf(theme);
+  var hl = document.getElementById('theme-hl');
+  if (hl) hl.value = theme.hl === 'dark' ? 'dark' : 'light';
+}
+
+function themeBaseOf(theme) {
+  if (!theme) return 'light';
+  if (theme.base === 'dark' || theme.base === 'light') return theme.base;
+  var rgb = parseHexColor(theme.vars && theme.vars['--bg']);
+  if (rgb) return colorLuminance(rgb) < 0.35 ? 'dark' : 'light';
+  return theme.hl === 'dark' ? 'dark' : 'light';
+}
+
+function applyBasePalette(base) {
+  var key = base === 'dark' ? 'dark' : 'light';
+  var theme = SIDEPANEL_THEMES && SIDEPANEL_THEMES[key];
+  if (!theme) return;
+  setThemeColorInputs(theme.vars);
+  var hl = document.getElementById('theme-hl');
+  if (hl) hl.value = theme.hl === 'dark' ? 'dark' : 'light';
+}
+
+var THEME_EMPTY_ICON = '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a10 10 0 1 1 10-10c0 1.7-1.3 3-3 3h-1.5a2.5 2.5 0 0 0-2 4c.3.4.5.9.5 1.4A2.6 2.6 0 0 1 12 22z"/><circle cx="7.5" cy="10.5" r=".8" fill="currentColor"/><circle cx="12" cy="7.5" r=".8" fill="currentColor"/><circle cx="16.5" cy="10.5" r=".8" fill="currentColor"/></svg>';
+var THEME_EXPORT_ICON = '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>';
+var THEME_DELETE_ICON = '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
+var THEME_CHECK_ICON = '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+
+function themeIsActive(id) { return config.theme === 'custom:' + id; }
+
+function syncThemeListActive() {
+  var items = document.querySelectorAll('#themes-list .theme-item');
+  for (var i = 0; i < items.length; i++) {
+    items[i].classList.toggle('active', themeIsActive(items[i].getAttribute('data-theme-id')));
+  }
+}
+
+function applyCustomTheme(id) {
+  if (!customThemes[id]) return;
+  config.theme = 'custom:' + id;
+  applyTheme(config.theme);
+  if (toolTheme) toolTheme.value = config.theme;
+  saveConfig();
+  syncThemeListActive();
+  if (!themeDraftDirty) loadThemePalette(customThemes[id]);
+  if (status) { status.textContent = 'Theme applied'; status.classList.remove('error'); }
+}
+
 function renderThemeList() {
   var list = document.getElementById('themes-list');
   if (!list) return;
+  var countEl = document.getElementById('themes-count');
   list.innerHTML = '';
   var ids = Object.keys(customThemes);
+  if (countEl) countEl.textContent = ids.length ? String(ids.length) : '';
   if (!ids.length) {
     var empty = document.createElement('li');
-    empty.className = 'docs-empty';
-    empty.textContent = 'No custom themes yet. Fill the form and Save.';
+    empty.className = 'panel-empty';
+    empty.innerHTML = THEME_EMPTY_ICON
+      + '<strong>No custom themes yet</strong>'
+      + '<span>Pick colors above and save your first theme.</span>';
     list.appendChild(empty);
     return;
   }
   ids.forEach(function (id) {
     var t = customThemes[id];
+    var active = themeIsActive(id);
     var li = document.createElement('li');
-    li.className = 'docs-item';
-    var title = document.createElement('span');
-    title.className = 'title';
-    title.textContent = t.name || 'Custom theme';
-    li.appendChild(title);
-    var act = document.createElement('div');
-    act.style.display = 'flex';
-    act.style.gap = '4px';
-    var applyBtn = document.createElement('button');
-    applyBtn.className = 'del';
-    applyBtn.style.opacity = '1';
-    applyBtn.textContent = 'Apply';
-    applyBtn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      config.theme = 'custom:' + id;
-      applyTheme(config.theme);
-      if (toolTheme) toolTheme.value = config.theme;
-      saveConfig();
+    li.className = 'theme-item' + (active ? ' active' : '');
+    li.setAttribute('data-theme-id', id);
+
+    var apply = document.createElement('button');
+    apply.type = 'button';
+    apply.className = 'theme-apply';
+    apply.title = 'Apply ' + (t.name || 'custom theme');
+    apply.setAttribute('aria-label', 'Apply theme ' + (t.name || 'Custom theme'));
+
+    var sw = document.createElement('span');
+    sw.className = 'theme-swatches';
+    sw.setAttribute('aria-hidden', 'true');
+    ['--bg', '--text', '--accent', '--surface'].forEach(function (key) {
+      var swatch = document.createElement('span');
+      swatch.style.background = colorValue(t, key, 'transparent');
+      sw.appendChild(swatch);
     });
-    act.appendChild(applyBtn);
+    apply.appendChild(sw);
+
+    var meta = document.createElement('span');
+    meta.className = 'theme-meta';
+    var name = document.createElement('span');
+    name.className = 'theme-name';
+    name.textContent = t.name || 'Custom theme';
+    var sub = document.createElement('span');
+    sub.className = 'theme-sub';
+    sub.textContent = (t.hl === 'dark' ? 'Dark' : 'Light') + ' syntax';
+    meta.appendChild(name);
+    meta.appendChild(sub);
+    apply.appendChild(meta);
+
+    var check = document.createElement('span');
+    check.className = 'theme-check';
+    check.innerHTML = THEME_CHECK_ICON;
+    apply.appendChild(check);
+
+    apply.addEventListener('click', function (e) {
+      e.stopPropagation();
+      applyCustomTheme(id);
+    });
+    li.appendChild(apply);
+
+    var act = document.createElement('span');
+    act.className = 'theme-item-actions';
+
     var exportBtn = document.createElement('button');
-    exportBtn.className = 'del';
-    exportBtn.style.opacity = '1';
-    exportBtn.textContent = 'Export';
+    exportBtn.type = 'button';
+    exportBtn.className = 'theme-action';
+    exportBtn.title = 'Export theme JSON';
+    exportBtn.setAttribute('aria-label', 'Export theme');
+    exportBtn.innerHTML = THEME_EXPORT_ICON;
     exportBtn.addEventListener('click', function (e) {
       e.stopPropagation();
       downloadFile((t.name || 'theme') + '.json', 'application/json;charset=utf-8', JSON.stringify(t, null, 2));
     });
     act.appendChild(exportBtn);
+
     var delBtn = document.createElement('button');
-    delBtn.className = 'del';
-    delBtn.textContent = '×';
-    delBtn.title = 'Delete';
+    delBtn.type = 'button';
+    delBtn.className = 'theme-action danger';
+    delBtn.title = 'Delete theme';
+    delBtn.setAttribute('aria-label', 'Delete theme');
+    delBtn.innerHTML = THEME_DELETE_ICON;
     delBtn.addEventListener('click', function (e) {
       e.stopPropagation();
-      if (!confirm('Delete theme "' + (t.name || 'Custom theme') + '"?')) return;
-      globalThis.mdDB.del('themes', id, function () {
-        delete customThemes[id];
-        delete globalThis.SIDEPANEL_THEMES['custom:' + id];
-        if (config.theme === 'custom:' + id) {
-          config.theme = 'light';
-          applyTheme('light');
-          if (toolTheme) toolTheme.value = 'light';
-          saveConfig();
-        }
-        refreshThemeSelect();
-        renderThemeList();
+      mdConfirm({
+        title: 'Delete theme?',
+        message: '“' + (t.name || 'Custom theme') + '” will be removed from your custom themes.',
+        confirmLabel: 'Delete',
+        tone: 'danger'
+      }).then(function (ok) {
+        if (!ok) return;
+        globalThis.mdDB.del('themes', id, function () {
+          delete customThemes[id];
+          delete globalThis.SIDEPANEL_THEMES['custom:' + id];
+          if (config.theme === 'custom:' + id) {
+            config.theme = 'light';
+            applyTheme('light');
+            if (toolTheme) toolTheme.value = 'light';
+            saveConfig();
+          }
+          refreshThemeSelect();
+          renderThemeList();
+        });
       });
     });
     act.appendChild(delBtn);
+
     li.appendChild(act);
     list.appendChild(li);
   });
@@ -835,16 +1347,19 @@ function saveCustomTheme() {
   vars['--accent'] = document.getElementById('theme-accent').value;
   vars['--code-bg'] = document.getElementById('theme-codebg').value;
   var hl = document.getElementById('theme-hl').value === 'dark' ? 'dark' : 'light';
-  var theme = { id: uid(), name: name, vars: vars, hl: hl, createdAt: Date.now() };
+  var theme = { id: uid(), name: name, vars: vars, hl: hl, base: base, createdAt: Date.now() };
   globalThis.mdDB.put('themes', theme, function (ok) {
     if (!ok) return;
     registerCustomTheme(theme);
     refreshThemeSelect();
-    renderThemeList();
     config.theme = 'custom:' + theme.id;
     applyTheme(config.theme);
     if (toolTheme) toolTheme.value = config.theme;
     saveConfig();
+    renderThemeList();
+    themeDraftDirty = false;
+    var nameInput = document.getElementById('theme-name');
+    if (nameInput) nameInput.value = '';
     if (status) { status.textContent = 'Theme saved'; status.classList.remove('error'); }
   });
 }
@@ -863,6 +1378,9 @@ function importCustomThemesFromFile(file) {
           name: item.name || 'Imported theme',
           vars: item.vars,
           hl: item.hl === 'dark' ? 'dark' : 'light',
+          base: item.base === 'dark' || item.base === 'light'
+            ? item.base
+            : (item.hl === 'dark' ? 'dark' : 'light'),
           createdAt: Date.now()
         };
         globalThis.mdDB.put('themes', theme, function (ok) {
@@ -886,6 +1404,7 @@ function setThemesOpen(on) {
   if (!themesPanel) return;
   if (on) themesPanel.removeAttribute('hidden');
   else themesPanel.setAttribute('hidden', '');
+  setPanelBtnActive('themes-btn', on);
   if (on) {
     renderThemeList();
     // prime color inputs from selected base not needed
@@ -1019,6 +1538,7 @@ function setLintOpen(on) {
   if (!lintPanel) return;
   if (on) lintPanel.removeAttribute('hidden');
   else lintPanel.setAttribute('hidden', '');
+  setPanelBtnActive('lint-btn', on);
   if (on) renderLintList();
 }
 
@@ -1421,7 +1941,16 @@ function runMermaid() {
   loadMermaid(function (m) {
     if (!m) return;
     try { m.initialize({ startOnLoad: false, securityLevel: 'strict' }); } catch (e) {}
-    try { m.run({ nodes: preview.querySelectorAll('.mermaid') }); } catch (e) {
+    // m.run() returns a promise: invalid diagrams reject asynchronously
+    // ({str, hash, error}) — a synchronous try/catch never sees them,
+    // which shows up as "Uncaught (in promise) #<Object>". suppressErrors
+    // makes mermaid render its error diagram instead of throwing.
+    try {
+      m.run({ nodes: preview.querySelectorAll('.mermaid'), suppressErrors: true })
+        .catch(function (err) {
+          console.error('[MD] mermaid run error:', (err && (err.str || err.message)) || err);
+        });
+    } catch (e) {
       console.error('[MD] mermaid run error:', e);
     }
   });
@@ -1498,7 +2027,7 @@ function renderMarkdown(src) {
     renderPreviewToc();
     runMermaid();
     if (status) { status.textContent = 'Live'; status.classList.remove('error'); }
-    copyBtn.textContent = 'Copy HTML';
+    setCopyLabel('Copy HTML');
     copyBtn.title = 'Copy rendered HTML (Ctrl+Enter / Ctrl+S)';
     updateOutline();
   } catch (e) {
@@ -1522,6 +2051,10 @@ function applyTheme(name) {
       root.style.setProperty(k, t.vars[k]);
     }
   }
+  root.style.setProperty('--on-accent', onAccentColor(t.vars['--accent']));
+  root.style.setProperty('--on-error', onAccentColor(t.vars['--error'] || '#d1242f'));
+  var bgRgb = parseHexColor(t.vars['--bg'] || '');
+  root.style.setProperty('color-scheme', (bgRgb ? colorLuminance(bgRgb) < 0.45 : t.hl === 'dark') ? 'dark' : 'light');
   if (toolTheme) toolTheme.value = name;
   // Swap highlight.js CSS
   if (hlLink) {
@@ -1587,7 +2120,7 @@ function convertHtmlToMd(html) {
   preview.innerHTML = '<pre class="md-source-output"></pre>';
   preview.firstChild.textContent = md;
   if (status) { status.textContent = 'HTML→MD'; status.classList.remove('error'); }
-  copyBtn.textContent = 'Copy MD';
+  setCopyLabel('Copy MD');
   copyBtn.title = 'Copy Markdown source (Ctrl+Enter / Ctrl+S)';
   updateOutline();
 }
@@ -1641,6 +2174,7 @@ function setSnapsOpen(on) {
   if (!snapsPanel) return;
   if (on) snapsPanel.removeAttribute('hidden');
   else snapsPanel.setAttribute('hidden', '');
+  setPanelBtnActive('snaps-btn', on);
   if (on) renderSnapList();
 }
 if (snapsBtn) snapsBtn.addEventListener('click', function () {
@@ -1650,10 +2184,17 @@ if (snapsBtn) snapsBtn.addEventListener('click', function () {
 });
 if (snapsCloseBtn) snapsCloseBtn.addEventListener('click', function () { setSnapsOpen(false); });
 if (snapsNewBtn) snapsNewBtn.addEventListener('click', function () {
-  var label = prompt('Snapshot label (optional):', '');
-  createSnapshot(label, function () {
-    setSnapsOpen(true);
-    renderSnapList();
+  mdPrompt({
+    title: 'Version snapshot',
+    icon: 'accent',
+    placeholder: 'Label (optional)',
+    confirmLabel: 'Create'
+  }).then(function (label) {
+    if (label === null) return;
+    createSnapshot(label, function () {
+      setSnapsOpen(true);
+      renderSnapList();
+    });
   });
 });
 if (diffCloseBtn) diffCloseBtn.addEventListener('click', hideDiff);
@@ -1684,6 +2225,7 @@ function setDocsOpen(on) {
   if (!docsPanel) return;
   if (on) docsPanel.removeAttribute('hidden');
   else docsPanel.setAttribute('hidden', '');
+  setPanelBtnActive('docs-btn', on);
 }
 if (docsBtn) docsBtn.addEventListener('click', function () {
   if (!docsPanel) return;
@@ -1735,6 +2277,34 @@ if (themeExportBtn) themeExportBtn.addEventListener('click', function () {
   downloadFile('marklens-themes.json', 'application/json;charset=utf-8', JSON.stringify(data, null, 2));
 });
 
+['theme-bg', 'theme-surface', 'theme-border', 'theme-text', 'theme-text2', 'theme-accent', 'theme-codebg'].forEach(function (id) {
+  var input = document.getElementById(id);
+  if (input) input.addEventListener('input', function () {
+    themeDraftDirty = true;
+    updateThemePreview();
+  });
+});
+var themeBaseSel = document.getElementById('theme-base');
+if (themeBaseSel) {
+  themeBaseSel.addEventListener('change', function () {
+    themeDraftDirty = true;
+    applyBasePalette(this.value);
+  });
+}
+var themeHlSel = document.getElementById('theme-hl');
+if (themeHlSel) {
+  themeHlSel.addEventListener('change', function () { themeDraftDirty = true; });
+}
+var themeResetBtn = document.getElementById('theme-reset-btn');
+if (themeResetBtn) {
+  themeResetBtn.addEventListener('click', function () {
+    themeDraftDirty = true;
+    var base = document.getElementById('theme-base');
+    applyBasePalette(base ? base.value : 'light');
+  });
+}
+updateThemePreview();
+
 var lintBtn = document.getElementById('lint-btn');
 var lintCloseBtn = document.getElementById('lint-close-btn');
 var lintRunBtn = document.getElementById('lint-run-btn');
@@ -1746,11 +2316,13 @@ if (templatesBtn) templatesBtn.addEventListener('click', function () {
   var opening = panel.hasAttribute('hidden');
   if (opening) panel.removeAttribute('hidden');
   else panel.setAttribute('hidden', '');
+  setPanelBtnActive('templates-btn', opening);
   if (opening) { renderTemplatesList(); renderSnippetsList(); }
 });
 if (templatesCloseBtn) templatesCloseBtn.addEventListener('click', function () {
   var panel = document.getElementById('templates-panel');
   if (panel) panel.setAttribute('hidden', '');
+  setPanelBtnActive('templates-btn', false);
 });
 if (lintBtn) lintBtn.addEventListener('click', function () {
   var wasHidden = !lintPanel || lintPanel.hasAttribute('hidden');
@@ -1775,6 +2347,9 @@ if (cmdInput) cmdInput.addEventListener('keydown', function (e) {
     if (first) first.click();
   } else if (e.key === 'Escape') {
     if (cmdModal) cmdModal.setAttribute('hidden', '');
+    // Keep the overlay's document-level Esc handler from also closing the
+    // overlay when the user only wanted to dismiss the palette.
+    e.stopPropagation();
   }
 });
 
@@ -1791,6 +2366,14 @@ document.addEventListener('keydown', function (e) {
   if (e.key === 'Escape') {
     var dm = document.getElementById('diff-modal');
     if (dm && !dm.hasAttribute('hidden')) { e.preventDefault(); hideDiff(); return; }
+  }
+  if (e.key === 'Escape' && EMBED) {
+    // Vim uses Esc to leave insert mode, so keep it inside the editor there.
+    // Everything else closes the overlay (its host removes the iframe).
+    if (config.keymap === 'vim' && cm && cm.hasFocus()) return;
+    e.preventDefault();
+    closeOverlay();
+    return;
   }
   if (e.altKey && !mod && (e.key === '1' || e.key === '2' || e.key === '3')) {
     e.preventDefault();
@@ -1853,14 +2436,25 @@ settingsBtn.addEventListener('click', function () {
   }
 });
 
+// Overlay close channel: the host (js/overlay.js) listens for this message and
+// removes the fullscreen iframe. Dedicated (non-window) parents are ignored, so
+// sidepanel.html?embed=1 opened directly in a tab behaves like the normal editor.
+function closeOverlay() {
+  if (!EMBED) return;
+  try {
+    window.parent.postMessage({ source: 'marklens', action: 'close-overlay' }, '*');
+  } catch (e) {}
+}
+if (overlayCloseBtn) overlayCloseBtn.addEventListener('click', closeOverlay);
+
 copyBtn.addEventListener('click', function () {
   var copyText = inputMode === 'html'
     ? (preview.firstChild ? preview.firstChild.textContent : '')
     : preview.innerHTML;
   var done = function () {
-    var old = copyBtn.textContent;
-    copyBtn.textContent = 'Copied!';
-    setTimeout(function () { copyBtn.textContent = old; }, 1200);
+    var old = copyBtnLabel ? copyBtnLabel.textContent : copyBtn.textContent;
+    setCopyLabel('Copied!');
+    setTimeout(function () { setCopyLabel(old); }, 1200);
   };
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(copyText).then(done, done);
@@ -2022,6 +2616,7 @@ toolTheme.addEventListener('change', function () {
   config.theme = this.value;
   applyTheme(config.theme);
   saveConfig();
+  syncThemeListActive();
 });
 
 toolFontSize.addEventListener('change', function () {
@@ -2050,7 +2645,9 @@ function applyPending(pending) {
   pendingApplied = true;
   setText(pending);
   setInputMode('md', true);
-  setView('preview', true);
+  // The overlay exists to edit: keep the split view. The docked panel keeps
+  // the historical preview-only landing.
+  setView(EMBED ? 'split' : 'preview', true);
   renderNow();
   status.textContent = 'From selection';
 }
@@ -2105,6 +2702,8 @@ loadConfig(function () {
     applyTheme(config.theme || DEFAULTS.theme);
     if (toolTheme) toolTheme.value = config.theme || DEFAULTS.theme;
     renderThemeList();
+    var bootTheme = SIDEPANEL_THEMES[config.theme || DEFAULTS.theme];
+    if (bootTheme) loadThemePalette(bootTheme);
   });
 
   // Pending context-menu selection takes precedence.

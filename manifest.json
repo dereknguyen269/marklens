@@ -1,10 +1,14 @@
 {
   "manifest_version": 3,
   "name": "MarkLens — Instant Markdown Renderer & Page Converter",
-  "version": "1.0.0",
-  "description": "Select Markdown text on any page — see a live rendered preview floating on the page. Or open the side panel to write your own.",
+  "version": "1.2.0",
+  "description": "Select Markdown on any page for a live preview — popup, side panel, or fullscreen overlay. Preview GitHub/Bitbucket PRs too.",
   "minimum_chrome_version": "116",
   "permissions": ["sidePanel", "contextMenus", "storage", "scripting", "activeTab"],
+  "host_permissions": [
+    "https://api.github.com/*",
+    "https://api.bitbucket.org/*"
+  ],
   "background": {
     "service_worker": "js/background.js"
   },
@@ -30,6 +34,6 @@
     "128": "icons/icon128.png"
   },
   "web_accessible_resources": [
-    { "resources": ["css/highlight.css", "css/highlight-dark.css", "icons/favicon.png"], "matches": ["<all_urls>"] }
+    { "resources": ["css/highlight.css", "css/highlight-dark.css", "icons/favicon.png", "sidepanel.html"], "matches": ["<all_urls>"] }
   ]
 }
