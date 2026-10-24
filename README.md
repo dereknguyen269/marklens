@@ -10,7 +10,7 @@ Free. No signup. Rendering, conversion, and the editor all run locally in your b
 
 - **Preview as Markdown** — select Markdown text on any page, right-click → *Preview as Markdown*, and see it rendered in a floating popup (or the side panel / fullscreen overlay).
 - **Convert HTML to Markdown** — select HTML, right-click → *Convert HTML to Markdown*, and get the Markdown source.
-- **Preview PR as Markdown (raw)** — on GitHub or Bitbucket pull-request pages, right-click anywhere and get the PR description and comments as actual Markdown source, rendered in the floating popup. Optional tokens in Settings unlock private repos and raise rate limits; requests go only to `api.github.com` / `api.bitbucket.org` when you invoke the menu item.
+- **Preview PR as Markdown (raw)** — on GitHub or Bitbucket pull-request pages, right-click anywhere and get the PR description and comments as actual Markdown source, rendered in the floating popup. Public repositories only; requests go only to `api.github.com` / `api.bitbucket.org` when you invoke the menu item, and no credentials are collected or stored.
 - **Side panel editor** — write or paste Markdown/HTML with a live split / edit / preview layout.
 - **Fullscreen overlay** — the same split editor, prefilled from your selection and layered over the current page; `Esc` or `×` closes it.
 - **Code editor** — Markdown highlighting, line numbers, find/replace (`Ctrl+F`), and optional Vim bindings (Keys selector).
@@ -39,7 +39,7 @@ Requires **Chrome 116+** (the `sidePanel` API).
 - **From a page:** select text → right-click → *Preview as Markdown* or *Convert HTML to Markdown*. The result appears in a floating popup, the side panel, or a fullscreen overlay, depending on your default mode.
 - **On a pull request:** open a GitHub (`…/pull/N`) or Bitbucket (`…/pull-requests/N`) page, right-click anywhere → *Preview PR as Markdown (raw)*. The description and comments are fetched from the host's API and rendered.
 - **From the toolbar icon:** open the editor as a new tab, open the side panel, jump to Settings, or view About.
-- **Settings:** choose the default display mode (popup / side panel / overlay), theme, font family, and size, plus optional GitHub/Bitbucket tokens for private-repo PRs. Preferences persist via `chrome.storage`.
+- **Settings:** choose the default display mode (popup / side panel / overlay), theme, font family, and size. Preferences persist via `chrome.storage`.
 
 ## Project structure
 

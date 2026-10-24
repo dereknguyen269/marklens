@@ -46,7 +46,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M6 9v12"/></svg>
           </div>
           <h3>Pull Request pages</h3>
-          <p>On GitHub or Bitbucket PR pages, right-click anywhere and choose <em>Preview PR as Markdown (raw)</em>. The real Markdown source of the description and comments is fetched and rendered. Private repos work when a token is saved in Settings.</p>
+          <p>On GitHub or Bitbucket PR pages, right-click anywhere and choose <em>Preview PR as Markdown (raw)</em>. The real Markdown source of the description and comments is fetched and rendered. Works with public repositories.</p>
         </div>
         <div class="opt-card">
           <div class="opt-card-icon">
@@ -128,23 +128,6 @@
             <option value='Palatino, "Palatino Linotype", serif'>Palatino</option>
           </select>
         </div>
-
-        <h3 class="opt-subheading">GitHub / Bitbucket tokens (optional)</h3>
-        <div class="opt-field">
-          <label for="opt-gh-token">GitHub token</label>
-          <input type="password" id="opt-gh-token" placeholder="ghp_… or github_pat_…" autocomplete="off">
-          <p class="opt-hint">Fine-grained PAT with <strong>Pull requests: Read-only</strong>. Unlocks private-repo PRs on GitHub and raises the 60/hour anonymous rate limit.</p>
-        </div>
-        <div class="opt-field">
-          <label for="opt-bb-user">Bitbucket username</label>
-          <input type="text" id="opt-bb-user" placeholder="your Bitbucket username" autocomplete="off">
-        </div>
-        <div class="opt-field">
-          <label for="opt-bb-token">Bitbucket app password</label>
-          <input type="password" id="opt-bb-token" placeholder="app password with Pull requests: Read" autocomplete="off">
-          <p class="opt-hint">Create at bitbucket.org → Personal settings → App passwords. Used as Basic auth together with the username above for private-repo PRs.</p>
-        </div>
-        <p class="opt-hint">Tokens live only in this browser's extension storage (chrome.storage.local) and are sent only to api.github.com / api.bitbucket.org.</p>
 
         <div class="opt-actions">
           <button id="opt-save" class="opt-save-btn">Save Settings</button>

@@ -15,9 +15,6 @@ transmit, or share any personal data or user content.
   bindings are stored on-device (`chrome.storage.local`). A transient
   one-shot selection bridge (`chrome.storage.session`) carries context-menu
   selections to the panel and is deleted on read.
-- **API tokens (optional).** GitHub/Bitbucket tokens for the PR-preview
-  feature are stored only in your browser's local extension storage and are
-  sent only to the API hosts next described.
 
 ## The one networked feature
 
@@ -26,9 +23,9 @@ appears only on GitHub or Bitbucket pull-request pages, and runs only when
 you right-click it. It then makes read-only requests to that page's own host
 API — `api.github.com` or `api.bitbucket.org` — to fetch the pull request's
 description and comments, which are rendered locally. Every other rendering,
-conversion, and editing path works fully offline. Without a token, only
-public pull requests can be fetched (subject to the host's anonymous rate
-limit); a token saved in Settings additionally authenticates private repos.
+conversion, and editing path works fully offline. Only public pull requests
+can be fetched (subject to each host's anonymous rate limit); no credentials
+are ever requested or stored.
 
 ## What we don't do
 
