@@ -13,6 +13,7 @@ Free. No signup. Rendering, conversion, and the editor all run locally in your b
 - **Preview PR as Markdown (raw)** — on GitHub or Bitbucket pull-request pages, right-click anywhere and get the PR description and comments as actual Markdown source, rendered in the floating popup. Public repositories only; requests go only to `api.github.com` / `api.bitbucket.org` when you invoke the menu item, and no credentials are collected or stored.
 - **Side panel editor** — write or paste Markdown/HTML with a live split / edit / preview layout.
 - **Fullscreen overlay** — the same split editor, prefilled from your selection and layered over the current page; `Esc` or `×` closes it.
+- **Editor power tools** — Mermaid diagrams, KaTeX math (`$x^2$`, `$$…$$`), Markdown lint, templates & snippets, version snapshots, a document library, and a command palette (`Ctrl/⌘+K`).
 - **Code editor** — Markdown highlighting, line numbers, find/replace (`Ctrl+F`), and optional Vim bindings (Keys selector).
 - **Draft autosave** — your editor text persists locally in the browser; work survives a closed tab. No signup, no account, no servers.
 - **Export anywhere** — download your document as Markdown, styled HTML, or print / save as PDF with one click.

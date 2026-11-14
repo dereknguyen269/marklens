@@ -252,7 +252,7 @@ body {
 .tool-grp label {
   color: var(--text2);
   font-weight: 600;
-  font-size: 10px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: .05em;
   white-space: nowrap;
@@ -467,7 +467,7 @@ body {
   border-radius: 999px;
   background: var(--code-bg);
   color: var(--text2);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   line-height: 1.5;
   text-align: center;
@@ -476,7 +476,7 @@ body {
 .docs-head-actions .panel-text-btn {
   width: auto;
   padding: 0 8px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: .04em;
   color: var(--accent);
@@ -560,7 +560,7 @@ body {
   border-radius: 4px;
   background: color-mix(in srgb, var(--text) 6%, transparent);
   color: var(--text2);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: .02em;
 }
@@ -618,7 +618,7 @@ body {
 }
 .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .field-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: .04em;
   text-transform: uppercase;
@@ -677,7 +677,7 @@ select.field-input {
   border-radius: 999px;
   background: var(--tp-accent, var(--accent));
   color: var(--tp-on-accent, #fff);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   line-height: 1.2;
 }
@@ -694,7 +694,7 @@ select.field-input {
   background: none;
   color: var(--text2);
   font: inherit;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   cursor: pointer;
   text-decoration: underline;
@@ -758,7 +758,7 @@ select.field-input {
   flex: none;
   margin-top: 6px;
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 500;
   letter-spacing: .02em;
   color: var(--text2);
@@ -1280,6 +1280,8 @@ body.zen .docs-panel { display: none !important; }
    one line; tooltips and aria-labels carry the names. */
 @media (max-width: 1080px) {
   .status-btn { padding: 0 6px; gap: 0; }
+  #docs-btn { gap: 4px; }
+  #docs-btn .sb-label { display: inline; }
   .status-btn .sb-label { display: none; }
   .status-btn.status-primary { padding: 0 7px; }
   .status-btn.status-primary .sb-label { display: inline; }
@@ -1287,6 +1289,8 @@ body.zen .docs-panel { display: none !important; }
 }
 
 @media (max-width: 520px) {
+  #docs-btn { gap: 0; }
+  #docs-btn .sb-label { display: none; }
   .statusbar { gap: 6px 8px; padding: 6px 8px; }
   .status-actions { gap: 2px; }
   .status-divider { display: none; }
@@ -1816,3 +1820,31 @@ body.embed .topbar { padding-right: 10px; }
   background-color: color-mix(in srgb, var(--accent-soft) 55%, var(--bg));
 }
 .popup-mode-row select:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+
+
+/* ---- Review fixes: a11y + UX ---- */
+.docs-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.docs-item:focus-within .del { opacity: .8; }
+.docs-item .del:focus-visible { opacity: 1; outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 3px; }
+.docs-item.static { cursor: default; }
+.docs-item.static:hover { background: transparent; }
+
+/* Zen mode: visible exit affordance (the status bar is hidden in Zen). */
+.zen-exit {
+  position: fixed; top: 10px; right: 12px; z-index: 50;
+  padding: 5px 11px; border: 1px solid var(--border); border-radius: 999px;
+  background: var(--surface); color: var(--text2);
+  font: inherit; font-size: 12px; cursor: pointer; opacity: .85;
+  box-shadow: var(--shadow-sm);
+}
+.zen-exit:hover, .zen-exit:focus-visible { opacity: 1; color: var(--text); border-color: var(--accent); }
+.zen-exit[hidden] { display: none; }
+
+/* Mermaid: readable fallback before/without rendering, no layout jump. */
+.mermaid { white-space: pre; overflow: auto; text-align: center; min-height: 2.5em; margin: 1em 0; }
+.mermaid svg { max-width: 100%; height: auto; }
+
+/* Framed by a web page without the host's token: invisible and inert. */
+body.locked > * { visibility: hidden !important; pointer-events: none !important; }
+
+@media print { .zen-exit { display: none !important; } }

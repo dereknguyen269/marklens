@@ -27,6 +27,9 @@ On GitHub or Bitbucket pull-request pages, right-click anywhere and choose Previ
 **Full editor with live preview**
 Open the side panel or a full tab for a split/edit/preview Markdown editor with syntax highlighting, line numbers, find & replace, optional Vim bindings, and synced scrolling. The fullscreen overlay mode drops that same editor over the current page — selection prefilled, Esc to close. Drafts autosave locally so work survives a closed tab.
 
+**Power tools**
+Mermaid diagrams, KaTeX math, Markdown lint, templates and snippets, version snapshots, a document library, and a command palette (Ctrl/⌘+K) — all local.
+
 **Export anywhere**
 Download your document as Markdown, a styled standalone HTML file, or print / save as PDF. Drag & drop .md, .txt, and .html files straight into the editor.
 

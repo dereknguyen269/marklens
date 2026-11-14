@@ -86,6 +86,25 @@ var INJECT_FILES = [
   'js/content.js'
 ];
 
+// Inject the fullscreen overlay host. A random one-shot token is stored in
+// session storage and handed to the host in the isolated world; the embedded
+// editor only unlocks when the host proves it knows it (see sidepanel.js), so
+// a web page that iframes sidepanel.html on its own gets a blank, inert frame.
+function injectOverlay(tabId) {
+  var bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  var token = Array.prototype.map.call(bytes, function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
+  return chrome.storage.session.set({ overlayToken: token }).then(function () {
+    return chrome.scripting.executeScript({
+      target: { tabId: tabId },
+      func: function (t) { globalThis.__marklensOverlayToken = t; },
+      args: [token]
+    });
+  }).then(function () {
+    return chrome.scripting.executeScript({ target: { tabId: tabId }, files: ['js/overlay.js'] });
+  });
+}
+
 // Read the live selection from the page (preserves line breaks, unlike
 // info.selectionText) plus its bounding rect. Resolves to a plain object;
 // never rejects the caller's chain.
@@ -266,7 +285,7 @@ function fetchBitbucketPr(pr) {
 // Compose one markdown document: title → meta line → description → comments.
 function composePrMarkdown(pr, data) {
   var parts = [];
-  parts.push('# ' + (data.title || 'Pull Request #' + pr.number));
+  parts.push('# ' + (String(data.title || '').replace(/\s+/g, ' ').trim() || 'Pull Request #' + pr.number));
   parts.push('');
   var meta = [];
   if (data.link) meta.push(data.link);
@@ -332,10 +351,7 @@ function routePrMarkdown(md, mode, tab) {
   var stash = stashForSidePanel(false, md, md);
   if (mode === 'overlay') {
     return stash.then(function () {
-      return chrome.scripting.executeScript({
-        target: { tabId: tabId },
-        files: ['js/overlay.js']
-      });
+      return injectOverlay(tabId);
     }).catch(function (err) {
       console.warn('[MD] PR overlay inject failed:', err.message);
       fallbackToPanelOrTab(tab);
@@ -403,10 +419,7 @@ chrome.contextMenus.onClicked.addListener(function (info, tab) {
         var html = (liveSel && liveSel.html) || '';
         return stashForSidePanel(isHtmlToMd, text, html || text);
       }).then(function () {
-        return chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          files: ['js/overlay.js']
-        });
+        return injectOverlay(tab.id);
       }).catch(function (err) {
         console.warn('[MD] overlay inject failed (likely restricted page):', err.message);
         stashForSidePanel(isHtmlToMd, selected, selected);
@@ -500,7 +513,19 @@ chrome.contextMenus.onClicked.addListener(function (info, tab) {
 });
 
 // Handle "open in side panel" request from popup content.js.
-chrome.runtime.onMessage.addListener(function (msg, sender) {
+chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
+  // Mermaid is ~3 MB, so it is injected on demand (only when a diagram is
+  // rendered) into the same isolated world as content.js, not on every preview.
+  if (msg && msg.action === 'injectMermaid') {
+    if (!sender.tab || sender.tab.id == null) { sendResponse({ ok: false }); return; }
+    chrome.scripting.executeScript({ target: { tabId: sender.tab.id }, files: ['vendor/mermaid.min.js'] })
+      .then(function () { sendResponse({ ok: true }); })
+      .catch(function (err) {
+        console.error('[MD] mermaid inject failed:', err.message);
+        sendResponse({ ok: false });
+      });
+    return true;
+  }
   if (msg && msg.action === 'openSidePanel') {
     var tab = sender.tab;
     if (tab && tab.windowId != null && chrome.sidePanel && chrome.sidePanel.open) {
