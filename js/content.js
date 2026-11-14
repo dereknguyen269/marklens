@@ -4,10 +4,12 @@
 
   const NS = 'md-live-preview';
 
+  // Fail closed: without DOMPurify, show the markup as escaped text.
   function safeHtml(html) {
-    return (globalThis.DOMPurify && globalThis.DOMPurify.sanitize)
-      ? globalThis.DOMPurify.sanitize(html)
-      : html;
+    if (globalThis.DOMPurify && globalThis.DOMPurify.sanitize) return globalThis.DOMPurify.sanitize(html);
+    var d = document.createElement('div');
+    d.textContent = html;
+    return d.innerHTML;
   }
 
   function convertMermaidCodeBlocks(container) {
@@ -26,21 +28,29 @@
     }
   }
 
+  var mermaidWaiters = null;
+  var popupDark = false;
   function loadMermaid(cb) {
     if (globalThis.mermaid) { if (cb) cb(globalThis.mermaid); return; }
-    var script = document.createElement('script');
-    script.src = (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL)
-      ? chrome.runtime.getURL('vendor/mermaid.min.js') : 'vendor/mermaid.min.js';
-    script.onload = function () { if (cb) cb(globalThis.mermaid); };
-    script.onerror = function () { if (cb) cb(null); };
-    document.head.appendChild(script);
+    // Coalesce concurrent requests so the 3 MB bundle is injected once.
+    if (mermaidWaiters) { if (cb) mermaidWaiters.push(cb); return; }
+    mermaidWaiters = cb ? [cb] : [];
+    // A page <script> would be blocked (not web-accessible) and would run in
+    // the page's world; ask the background to inject into our isolated world.
+    try {
+      chrome.runtime.sendMessage({ action: 'injectMermaid' }, function () {
+        void chrome.runtime.lastError;
+        var waiters = mermaidWaiters; mermaidWaiters = null;
+        waiters.forEach(function (f) { f(globalThis.mermaid || null); });
+      });
+    } catch (e) { var w = mermaidWaiters; mermaidWaiters = null; w.forEach(function (f) { f(null); }); }
   }
 
   function runMermaid(container) {
     if (!container || !container.querySelector('.mermaid')) return;
     loadMermaid(function (m) {
       if (!m) return;
-      try { m.initialize({ startOnLoad: false, securityLevel: 'strict' }); } catch (e) {}
+      try { m.initialize({ startOnLoad: false, securityLevel: 'strict', theme: popupDark ? 'dark' : 'default' }); } catch (e) {}
       // m.run() returns a promise: invalid diagrams reject asynchronously
       // ({str, hash, error}) — a synchronous try/catch never sees them,
       // which shows up as "Uncaught (in promise) #<Object>". suppressErrors
@@ -80,12 +90,13 @@
     return score >= 6;
   }
 
-  // Plain text of cloned selection HTML (detached container → no resources load).
+  // Plain text of cloned selection HTML. Parsed in an inert document so
+  // <img onerror> etc. never load or run in the host page.
   function htmlToText(html) {
     try {
-      var d = document.createElement('div');
-      d.innerHTML = html;
-      return d.textContent || '';
+      var d = document.implementation.createHTMLDocument('');
+      d.body.innerHTML = html;
+      return d.body.textContent || '';
     } catch (e) { return String(html || ''); }
   }
 
@@ -421,6 +432,10 @@
     }
     hlLink.href = t.hljs === 'dark' ? DARK_HL : LIGHT_HL;
     if (themeSel) themeSel.value = name;
+    var wasDark = popupDark;
+    popupDark = t.hljs === 'dark';
+    // Mermaid bakes colours into each SVG: redraw when the theme flips.
+    if (wasDark !== popupDark && lastSourceText && body.querySelector('.mermaid')) render(lastSourceText);
   }
 
   function applyConfig() {
@@ -460,7 +475,7 @@
         if (copyBtn) { copyBtn.textContent = 'Copy HTML'; copyBtn.title = 'Copy rendered HTML'; }
         if (titleEl) titleEl.textContent = 'Markdown Preview';
       } catch (e) {
-        body.innerHTML = '<pre style="color:#c00;white-space:pre-wrap">' + safeHtml(String(e && e.stack ? e.stack : e)) + '</pre>';
+        body.innerHTML = '<pre style="color:var(--md-del,#c00);white-space:pre-wrap">' + safeHtml(String(e && e.message ? e.message : e)) + '</pre>';
         console.error('[MD] page render error:', e);
       }
       return;
@@ -468,7 +483,7 @@
     if (tries < 40) {
       setTimeout(function () { renderWhenReady(text, tries + 1); }, 50);
     } else {
-      body.innerHTML = '<p style="color:#c00">marked not loaded.</p>';
+      body.innerHTML = '<p style="color:var(--md-del,#c00)">marked not loaded.</p>';
       console.error('[MD] marked missing in page after retries');
     }
   }

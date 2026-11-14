@@ -2,6 +2,19 @@
 
 All notable changes to MarkLens are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the store package (`marklens-<version>.zip`) is rebuilt at each release and always matches `manifest.json` `version`.
 
+## [Unreleased]
+
+### Fixed
+- **Mermaid in the floating popup** now renders: `vendor/mermaid.min.js` is injected on demand into the content-script world by the background worker instead of via a blocked page `<script>`.
+- **Clickjacking:** a web page that iframes `sidepanel.html` now gets an invisible, inert frame; the overlay host hands the embedded editor a one-shot token (session storage + `postMessage`) to unlock it.
+- Sanitising now fails closed (escaped text) when DOMPurify is missing; `htmlToText` parses in an inert document.
+- Inline math follows pandoc rules, so "costs $5 and $10" is plain text; `\$` is a literal dollar; code placeholders can no longer collide with user text.
+- *Clear editor* asks for confirmation; Zen mode shows a visible exit button; Ctrl/⌘+S no longer hijacked (Ctrl/⌘+Enter copies).
+- Mermaid follows the app theme; palette toggles keep status-bar state in sync; panels (rails) close each other in narrow windows.
+- Keyboard access for the document library, lint list and command palette (arrow keys, Enter/Space, F2 rename, focus trap/restore, `role="dialog"`); overlay keeps focus inside and restores it on close; delete buttons are labelled and visible on focus.
+- Error text uses the theme's error colour (WCAG AA) and no longer shows stack traces; PR titles with newlines no longer break the heading; HTML export strips unsafe characters from the font family.
+- First run follows the OS light/dark preference; options copy corrected; small text raised to 11px; `sidepanel.html` markup fixed (`<title>`, viewport, unterminated `</script`).
+
 ## [1.2.0] — 2026-10-24
 
 Editor, preview, and policy work since the 1.0.0 store release.

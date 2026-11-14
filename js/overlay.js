@@ -11,12 +11,19 @@
 
 (function () {
   var HOST_ID = 'marklens-overlay-host';
+  // One-shot token from background.js (isolated world, invisible to the page).
+  // Read and clear it first so a re-injection can't leave it lying around.
+  var token = globalThis.__marklensOverlayToken;
+  try { delete globalThis.__marklensOverlayToken; } catch (e) {}
+
   var existing = document.getElementById(HOST_ID);
   if (existing) {
     var liveFrame = existing.querySelector('iframe');
     if (liveFrame) { try { liveFrame.focus(); } catch (e) {} }
     return;
   }
+
+  var previousFocus = document.activeElement;
 
   var root = document.createElement('div');
   root.id = HOST_ID;
@@ -33,21 +40,36 @@
   frame.setAttribute('allow', 'clipboard-write');
   frame.style.cssText = 'border:0;display:block;width:100%;height:100%;' +
     'margin:0;padding:0;background:#fff;color-scheme:normal;';
+  // Avoid a white flash before a dark theme loads: reveal once the frame is up.
+  frame.style.visibility = 'hidden';
 
   function closeOverlay() {
     window.removeEventListener('message', onMessage);
     document.removeEventListener('keydown', onKey, true);
+    document.removeEventListener('focusin', onFocusIn, true);
     if (frame.parentNode) frame.parentNode.removeChild(frame);
     if (root.parentNode) root.parentNode.removeChild(root);
-    try { window.focus(); } catch (e) {}
+    // Return focus to whatever the user was on before the overlay opened.
+    try {
+      if (previousFocus && previousFocus.focus && document.contains(previousFocus)) previousFocus.focus();
+      else window.focus();
+    } catch (e) {}
   }
 
   // The embedded page posts this when its close button / Esc fires. Verify the
   // source window so a page script cannot spoof the close channel.
   function onMessage(e) {
     if (e.source !== frame.contentWindow) return;
-    if (!e.data || e.data.source !== 'marklens' || e.data.action !== 'close-overlay') return;
-    closeOverlay();
+    if (!e.data || e.data.source !== 'marklens') return;
+    if (e.data.action === 'close-overlay') { closeOverlay(); return; }
+    // The embedded editor stays locked until it receives the token, delivered
+    // only to the frame's own window and extension origin.
+    if (e.data.action === 'overlay-ready' && token) {
+      try {
+        frame.contentWindow.postMessage({ source: 'marklens', action: 'overlay-token', token: token },
+          new URL(frame.src).origin);
+      } catch (err) {}
+    }
   }
 
   // Fallback for focus that never entered the iframe (e.g. it failed to load).
@@ -66,12 +88,24 @@
   document.addEventListener('keydown', onKey, true);
 
   frame.addEventListener('load', function () {
+    frame.style.visibility = '';
     try { frame.focus(); } catch (e) {}
   });
+
+  // Keep Tab inside the dialog: the iframe can't hand focus back to hidden
+  // page controls. The embedded page wraps its own Tab order; this catches
+  // focus that landed on the host page itself.
+  document.addEventListener('focusin', onFocusIn, true);
+  function onFocusIn(e) {
+    if (root.contains(e.target)) return;
+    try { frame.focus(); } catch (err) {}
+  }
 
   // Subtle fade-in through the Web Animations API (works regardless of the
   // page's style-src CSP, unlike a keyframes <style> block).
   try {
-    root.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 140, easing: 'ease-out' });
+    if (!window.matchMedia || !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      root.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 140, easing: 'ease-out' });
+    }
   } catch (e) {}
 })();

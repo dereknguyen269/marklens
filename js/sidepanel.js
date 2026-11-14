@@ -13,24 +13,55 @@ var DEFAULTS = {
 
 var config = {};
 
+var MOD_KEY = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? '⌘' : 'Ctrl';
+
 // Embedded overlay mode: sidepanel.html?embed=1 is iframed fullscreen by
 // js/overlay.js. Layout stays identical; this only reveals the close button
 // and routes Esc/close back to the host page.
 var EMBED = window.parent !== window && /[?&]embed=1(?:&|$)/.test(location.search);
 if (EMBED) document.body.classList.add('embed');
 
+// Clickjacking guard: any web page can iframe this extension page. A framed
+// copy stays invisible and inert (body.locked, no boot, no pending-selection
+// pickup) until the legitimate host (js/overlay.js) proves it knows the
+// one-shot token background.js stored in session storage.
+var FRAMED = window.parent !== window;
+var unlockQueue = [];
+function whenUnlocked(fn) {
+  if (!FRAMED || !document.body.classList.contains('locked')) fn();
+  else unlockQueue.push(fn);
+}
+if (FRAMED) {
+  document.body.classList.add('locked');
+  window.addEventListener('message', function (e) {
+    var d = e.data;
+    if (e.source !== window.parent || !d || d.source !== 'marklens' || d.action !== 'overlay-token' ||
+        typeof d.token !== 'string' || !d.token) return;
+    chrome.storage.session.get('overlayToken', function (res) {
+      if (!res || res.overlayToken !== d.token) return;
+      chrome.storage.session.remove('overlayToken');
+      document.body.classList.remove('locked');
+      var q = unlockQueue; unlockQueue = [];
+      q.forEach(function (fn) { fn(); });
+    });
+  });
+  try { window.parent.postMessage({ source: 'marklens', action: 'overlay-ready' }, '*'); } catch (e) {}
+}
+
 var SIDEPANEL_THEMES = globalThis.MD_SIDEPANEL_THEMES;
 
+// Fail closed: without DOMPurify, show the markup as escaped text.
 function safeHtml(html) {
-  return (globalThis.DOMPurify && globalThis.DOMPurify.sanitize)
-    ? globalThis.DOMPurify.sanitize(html)
-    : html;
+  if (globalThis.DOMPurify && globalThis.DOMPurify.sanitize) return globalThis.DOMPurify.sanitize(html);
+  var d = document.createElement('div');
+  d.textContent = html;
+  return d.innerHTML;
 }
 
 window.addEventListener('error', function (e) {
   if (status) { status.textContent = 'Error'; status.classList.add('error'); }
   if (preview) {
-    preview.innerHTML = '<pre style="color:#c00;white-space:pre-wrap">' +
+    preview.innerHTML = '<pre style="color:var(--error);white-space:pre-wrap">' +
       safeHtml(String(e.message || e.error || e)) + '</pre>';
   }
   console.error('[MD] side panel error:', e.message, e.error);
@@ -207,6 +238,31 @@ function closePrompt(result) {
     }
   });
 })();
+
+// In a narrow docked panel two open rails leave no room for the editor, so
+// opening one closes the others below 700px.
+function closeOtherRails(exceptId) {
+  if (window.innerWidth >= 700) return;
+  [['docs-panel', setDocsOpen], ['snaps-panel', setSnapsOpen], ['outline-panel', setOutlineOpen],
+   ['themes-panel', setThemesOpen], ['lint-panel', setLintOpen], ['templates-panel', setTemplatesOpen]
+  ].forEach(function (r) {
+    var p = document.getElementById(r[0]);
+    if (r[0] !== exceptId && p && !p.hasAttribute('hidden')) r[1](false);
+  });
+}
+
+// Make a list row operable from the keyboard (Enter / Space), like a button.
+// Keys pressed inside nested controls (e.g. the row's delete button) are ignored.
+function makeRowButton(li, activate, extraKeys) {
+  li.tabIndex = 0;
+  li.setAttribute('role', 'button');
+  li.addEventListener('click', activate);
+  li.addEventListener('keydown', function (e) {
+    if (e.target !== li) return;
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(e); }
+    else if (extraKeys && extraKeys[e.key]) { e.preventDefault(); extraKeys[e.key](e); }
+  });
+}
 
 // Highlight a status-bar panel toggle while its panel is open.
 function setPanelBtnActive(id, on) {
@@ -579,6 +635,7 @@ function renderDocList() {
       del.className = 'del';
       del.textContent = '×';
       del.title = 'Delete';
+      del.setAttribute('aria-label', 'Delete document ' + (d.title || 'Untitled'));
       del.addEventListener('click', function (e) {
         e.stopPropagation();
         mdConfirm({
@@ -589,8 +646,8 @@ function renderDocList() {
         }).then(function (ok) { if (ok) deleteDoc(d.id); });
       });
       li.appendChild(del);
-      li.addEventListener('click', function () { openDoc(d.id); });
-      li.addEventListener('dblclick', function () {
+      li.title = 'Open · double-click or F2 to rename';
+      function renameThis() {
         mdPrompt({
           title: 'Rename document',
           value: d.title || 'Untitled',
@@ -598,7 +655,9 @@ function renderDocList() {
         }).then(function (nt) {
           if (nt !== null) renameDoc(d.id, nt);
         });
-      });
+      }
+      makeRowButton(li, function () { openDoc(d.id); }, { F2: renameThis, Delete: function () { del.click(); } });
+      li.addEventListener('dblclick', renameThis);
       list.appendChild(li);
     });
   });
@@ -987,6 +1046,7 @@ function renderPreviewToc() {
 function setOutlineOpen(on) {
   outlinePanel = outlinePanel || document.getElementById('outline-panel');
   if (!outlinePanel) return;
+  if (on) closeOtherRails('outline-panel');
   if (on) outlinePanel.removeAttribute('hidden');
   else outlinePanel.setAttribute('hidden', '');
   setPanelBtnActive('outline-btn', on);
@@ -1402,6 +1462,7 @@ function importCustomThemesFromFile(file) {
 function setThemesOpen(on) {
   themesPanel = themesPanel || document.getElementById('themes-panel');
   if (!themesPanel) return;
+  if (on) closeOtherRails('themes-panel');
   if (on) themesPanel.removeAttribute('hidden');
   else themesPanel.setAttribute('hidden', '');
   setPanelBtnActive('themes-btn', on);
@@ -1528,7 +1589,7 @@ function renderLintList() {
     sub.textContent = iss.severity;
     info.appendChild(sub);
     li.appendChild(info);
-    li.addEventListener('click', function () { jumpToEditorLine(iss.line); });
+    makeRowButton(li, function () { jumpToEditorLine(iss.line); });
     list.appendChild(li);
   });
 }
@@ -1536,6 +1597,7 @@ function renderLintList() {
 function setLintOpen(on) {
   lintPanel = lintPanel || document.getElementById('lint-panel');
   if (!lintPanel) return;
+  if (on) closeOtherRails('lint-panel');
   if (on) lintPanel.removeAttribute('hidden');
   else lintPanel.setAttribute('hidden', '');
   setPanelBtnActive('lint-btn', on);
@@ -1631,7 +1693,7 @@ function renderTemplatesList() {
   list.innerHTML = '';
   TEMPLATES.forEach(function (t) {
     var li = document.createElement('li');
-    li.className = 'docs-item';
+    li.className = 'docs-item static';
     var title = document.createElement('span');
     title.className = 'title';
     title.textContent = t.name;
@@ -1652,7 +1714,7 @@ function renderSnippetsList() {
   list.innerHTML = '';
   SNIPPETS.forEach(function (s) {
     var li = document.createElement('li');
-    li.className = 'docs-item';
+    li.className = 'docs-item static';
     var title = document.createElement('span');
     title.className = 'title';
     title.textContent = s.trigger + '  —  ' + s.name;
@@ -1670,8 +1732,10 @@ function renderSnippetsList() {
 function setTemplatesOpen(on) {
   var panel = document.getElementById('templates-panel');
   if (!panel) return;
+  if (on) closeOtherRails('templates-panel');
   if (on) panel.removeAttribute('hidden');
   else panel.setAttribute('hidden', '');
+  setPanelBtnActive('templates-btn', on);
   if (on) {
     renderTemplatesList();
     renderSnippetsList();
@@ -1736,15 +1800,20 @@ function copyRichText() {
 }
 
 // Command palette
+function toggleRail(id, setter) {
+  var p = document.getElementById(id);
+  if (p) setter(p.hasAttribute('hidden'));
+}
+
 var COMMANDS = [
   { name: 'Open settings', action: function () { if (chrome.runtime.openOptionsPage) chrome.runtime.openOptionsPage(); else chrome.tabs.create({ url: chrome.runtime.getURL('options.html') }); } },
   { name: 'Toggle Zen mode', action: function () { setZen(!document.body.classList.contains('zen')); } },
-  { name: 'Toggle document library', action: function () { var p=document.getElementById('docs-panel'); if(p){ var o=p.hasAttribute('hidden'); if(o)p.removeAttribute('hidden'); else p.setAttribute('hidden',''); if(o)renderDocList(); } } },
-  { name: 'Toggle snapshots', action: function () { var was = document.getElementById('snaps-panel') && document.getElementById('snaps-panel').hasAttribute('hidden'); setSnapsOpen(!!was); } },
-  { name: 'Toggle outline', action: function () { var p=document.getElementById('outline-panel'); if(p){ var o=p.hasAttribute('hidden'); if(o)p.removeAttribute('hidden'); else p.setAttribute('hidden',''); if(o)updateOutline(); } } },
-  { name: 'Toggle templates', action: function () { var p=document.getElementById('templates-panel'); if(p){ var o=p.hasAttribute('hidden'); if(o)p.removeAttribute('hidden'); else p.setAttribute('hidden',''); if(o){renderTemplatesList();renderSnippetsList();} } } },
-  { name: 'Toggle lint', action: function () { var p=document.getElementById('lint-panel'); if(p){ var o=p.hasAttribute('hidden'); if(o)p.removeAttribute('hidden'); else p.setAttribute('hidden',''); if(o)renderLintList(); } } },
-  { name: 'Toggle themes', action: function () { var p=document.getElementById('themes-panel'); if(p){ var o=p.hasAttribute('hidden'); if(o)p.removeAttribute('hidden'); else p.setAttribute('hidden',''); if(o)renderThemeList(); } } },
+  { name: 'Toggle document library', action: function () { toggleRail('docs-panel', setDocsOpen); } },
+  { name: 'Toggle snapshots', action: function () { toggleRail('snaps-panel', setSnapsOpen); } },
+  { name: 'Toggle outline', action: function () { toggleRail('outline-panel', setOutlineOpen); } },
+  { name: 'Toggle templates', action: function () { toggleRail('templates-panel', setTemplatesOpen); } },
+  { name: 'Toggle lint', action: function () { toggleRail('lint-panel', setLintOpen); } },
+  { name: 'Toggle themes', action: function () { toggleRail('themes-panel', setThemesOpen); } },
   { name: 'New document', action: function () { var b=document.getElementById('docs-new-btn'); if(b) b.click(); } },
   { name: 'New snapshot', action: function () { var b=document.getElementById('snaps-new-btn'); if(b) b.click(); } },
   { name: 'Insert / update TOC', action: insertOrUpdateToc },
@@ -1756,9 +1825,45 @@ var COMMANDS = [
   { name: 'Print / PDF', action: function () { window.print(); } }
 ];
 
+var cmdRestoreFocus = null;
+
+function closeCommandPalette() {
+  var modal = document.getElementById('cmd-modal');
+  if (!modal || modal.hasAttribute('hidden')) return;
+  modal.setAttribute('hidden', '');
+  var back = cmdRestoreFocus;
+  cmdRestoreFocus = null;
+  if (back && back.focus && back !== document.body) { try { back.focus(); } catch (e) {} }
+  else focusEditor();
+}
+
+// Highlight command `idx` (clamped, wrapping) and expose it to assistive tech.
+function setCmdActive(idx) {
+  var items = document.querySelectorAll('#cmd-list .docs-item');
+  var input = document.getElementById('cmd-input');
+  if (!items.length) { if (input) input.removeAttribute('aria-activedescendant'); return; }
+  idx = (idx + items.length) % items.length;
+  items.forEach(function (li, i) {
+    var on = i === idx;
+    li.classList.toggle('active', on);
+    li.setAttribute('aria-selected', on ? 'true' : 'false');
+    if (on) {
+      if (input) input.setAttribute('aria-activedescendant', li.id);
+      li.scrollIntoView({ block: 'nearest' });
+    }
+  });
+}
+
+function moveCmdActive(delta) {
+  var items = Array.prototype.slice.call(document.querySelectorAll('#cmd-list .docs-item'));
+  var cur = items.findIndex(function (li) { return li.classList.contains('active'); });
+  setCmdActive((cur < 0 ? (delta > 0 ? -1 : 0) : cur) + delta);
+}
+
 function openCommandPalette() {
   var modal = document.getElementById('cmd-modal');
   if (!modal) return;
+  if (modal.hasAttribute('hidden')) cmdRestoreFocus = document.activeElement;
   modal.removeAttribute('hidden');
   var input = document.getElementById('cmd-input');
   var list = document.getElementById('cmd-list');
@@ -1767,19 +1872,28 @@ function openCommandPalette() {
     if (!list) return;
     list.innerHTML = '';
     var ql = (q || '').toLowerCase();
-    COMMANDS.filter(function (c) { return !ql || c.name.toLowerCase().indexOf(ql) !== -1; }).forEach(function (c) {
+    COMMANDS.filter(function (c) { return !ql || c.name.toLowerCase().indexOf(ql) !== -1; }).forEach(function (c, i) {
       var li = document.createElement('li');
       li.className = 'docs-item';
+      li.id = 'cmd-opt-' + i;
+      li.setAttribute('role', 'option');
       var title = document.createElement('span');
       title.className = 'title';
       title.textContent = c.name;
       li.appendChild(title);
       li.addEventListener('click', function () {
-        modal.setAttribute('hidden', '');
+        closeCommandPalette();
         try { c.action(); } catch (e) { console.error(e); }
       });
       list.appendChild(li);
     });
+    if (!list.children.length) {
+      var empty = document.createElement('li');
+      empty.className = 'docs-empty';
+      empty.textContent = 'No matching commands';
+      list.appendChild(empty);
+    }
+    setCmdActive(0);
   }
   if (input) {
     input.oninput = function () { render(input.value); };
@@ -1940,7 +2054,9 @@ function runMermaid() {
   if (!preview || !preview.querySelector('.mermaid')) return;
   loadMermaid(function (m) {
     if (!m) return;
-    try { m.initialize({ startOnLoad: false, securityLevel: 'strict' }); } catch (e) {}
+    // Follow the app theme (root color-scheme is set by applyTheme()).
+    var dark = document.documentElement.style.colorScheme === 'dark';
+    try { m.initialize({ startOnLoad: false, securityLevel: 'strict', theme: dark ? 'dark' : 'default' }); } catch (e) {}
     // m.run() returns a promise: invalid diagrams reject asynchronously
     // ({str, hash, error}) — a synchronous try/catch never sees them,
     // which shows up as "Uncaught (in promise) #<Object>". suppressErrors
@@ -1980,24 +2096,27 @@ function renderMathInText(text) {
   if (!globalThis.katex) return text;
   var codeBlocks = [];
   var working = String(text == null ? '' : text);
-  working = working.replace(/```[\s\S]*?```/g, function (m) { codeBlocks.push(m); return '%%CODE' + (codeBlocks.length - 1) + '%%'; });
-  working = working.replace(/`[^`\n]*`/g, function (m) { codeBlocks.push(m); return '%%CODE' + (codeBlocks.length - 1) + '%%'; });
+  // Private-use sentinels can't collide with user text.
+  working = working.replace(/```[\s\S]*?```/g, function (m) { codeBlocks.push(m); return '\uE000' + (codeBlocks.length - 1) + '\uE001'; });
+  working = working.replace(/`[^`\n]*`/g, function (m) { codeBlocks.push(m); return '\uE000' + (codeBlocks.length - 1) + '\uE001'; });
   working = working.replace(/\$\$([\s\S]+?)\$\$/g, function (_, eq) {
     try { return globalThis.katex.renderToString(eq.trim(), { displayMode: true, throwOnError: false }); }
     catch (e) { return '$$' + eq + '$$'; }
   });
-  working = working.replace(/\$([^\$\n]+?)\$/g, function (_, eq) {
+  // Pandoc rules: no space just inside the $…$, closing $ not followed by a
+  // digit, and \$ stays a literal dollar — so "costs $5 and $10" is plain text.
+  working = working.replace(/(?<![\\$])\$(?![\s$])([^$\n]*?[^\s\\$])\$(?!\d)/g, function (_, eq) {
     try { return globalThis.katex.renderToString(eq.trim(), { displayMode: false, throwOnError: false }); }
     catch (e) { return '$' + eq + '$'; }
   });
-  working = working.replace(/%%CODE(\d+)%%/g, function (_, i) { return codeBlocks[parseInt(i, 10)] || ''; });
+  working = working.replace(/\uE000(\d+)\uE001/g, function (_, i) { return codeBlocks[parseInt(i, 10)] || ''; });
   return working;
 }
 
 function renderMarkdown(src) {
   if (!globalThis.marked || typeof globalThis.marked.parse !== 'function') {
     if (status) { status.textContent = 'Renderer missing'; status.classList.add('error'); }
-    if (preview) preview.innerHTML = '<p style="color:#c00">marked not loaded — reload the extension.</p>';
+    if (preview) preview.innerHTML = '<p style="color:var(--error)">marked not loaded — reload the extension.</p>';
     console.error('[MD] marked missing on side panel');
     return;
   }
@@ -2028,11 +2147,11 @@ function renderMarkdown(src) {
     runMermaid();
     if (status) { status.textContent = 'Live'; status.classList.remove('error'); }
     setCopyLabel('Copy HTML');
-    copyBtn.title = 'Copy rendered HTML (Ctrl+Enter / Ctrl+S)';
+    copyBtn.title = 'Copy rendered HTML (' + MOD_KEY + '+Enter)';
     updateOutline();
   } catch (e) {
     if (status) { status.textContent = 'Render error'; status.classList.add('error'); }
-    if (preview) preview.innerHTML = '<pre style="color:#c00;white-space:pre-wrap">' + safeHtml(String(e && e.stack ? e.stack : e)) + '</pre>';
+    if (preview) preview.innerHTML = '<pre style="color:var(--error);white-space:pre-wrap">' + safeHtml(String(e && e.message ? e.message : e)) + '</pre>';
     console.error('[MD] render error:', e);
   }
 }
@@ -2056,6 +2175,10 @@ function applyTheme(name) {
   var bgRgb = parseHexColor(t.vars['--bg'] || '');
   root.style.setProperty('color-scheme', (bgRgb ? colorLuminance(bgRgb) < 0.45 : t.hl === 'dark') ? 'dark' : 'light');
   if (toolTheme) toolTheme.value = name;
+  // Mermaid bakes colours into each SVG: redraw diagrams when the theme flips.
+  var isDark = root.style.colorScheme === 'dark';
+  if (applyTheme.wasDark !== undefined && applyTheme.wasDark !== isDark && preview && preview.querySelector('.mermaid')) scheduleRender();
+  applyTheme.wasDark = isDark;
   // Swap highlight.js CSS
   if (hlLink) {
     hlLink.href = t.hl === 'dark'
@@ -2109,19 +2232,19 @@ function convertHtmlToMd(html) {
     var hasLib = !!globalThis.TurndownService;
     if (!hasLib) {
       if (status) { status.textContent = 'Converter missing'; status.classList.add('error'); }
-      if (preview) preview.innerHTML = '<p style="color:#c00">TurndownService not loaded — reload the extension.</p>';
+      if (preview) preview.innerHTML = '<p style="color:var(--error)">TurndownService not loaded — reload the extension.</p>';
       console.error('[MD] TurndownService missing: vendor/turndown.min.js did not load');
       return;
     }
     if (status) { status.textContent = 'Convert error'; status.classList.add('error'); }
-    if (preview) preview.innerHTML = '<pre style="color:#c00;white-space:pre-wrap">Conversion failed.</pre>';
+    if (preview) preview.innerHTML = '<pre style="color:var(--error);white-space:pre-wrap">Conversion failed.</pre>';
     return;
   }
   preview.innerHTML = '<pre class="md-source-output"></pre>';
   preview.firstChild.textContent = md;
   if (status) { status.textContent = 'HTML→MD'; status.classList.remove('error'); }
   setCopyLabel('Copy MD');
-  copyBtn.title = 'Copy Markdown source (Ctrl+Enter / Ctrl+S)';
+  copyBtn.title = 'Copy Markdown source (' + MOD_KEY + '+Enter)';
   updateOutline();
 }
 
@@ -2130,6 +2253,8 @@ function setInputMode(mode, silent) {
   config.inputMode = mode;
   modeMdBtn.classList.toggle('active', mode === 'md');
   modeHtmlBtn.classList.toggle('active', mode === 'html');
+  modeMdBtn.setAttribute('aria-pressed', mode === 'md' ? 'true' : 'false');
+  modeHtmlBtn.setAttribute('aria-pressed', mode === 'html' ? 'true' : 'false');
   setPlaceholder(mode);
   if (!silent) {
     saveConfig();
@@ -2172,6 +2297,7 @@ var diffCloseBtn = document.getElementById('diff-close');
 
 function setSnapsOpen(on) {
   if (!snapsPanel) return;
+  if (on) closeOtherRails('snaps-panel');
   if (on) snapsPanel.removeAttribute('hidden');
   else snapsPanel.setAttribute('hidden', '');
   setPanelBtnActive('snaps-btn', on);
@@ -2223,15 +2349,15 @@ if (diffModal) diffModal.addEventListener('click', function (e) {
 });
 function setDocsOpen(on) {
   if (!docsPanel) return;
+  if (on) closeOtherRails('docs-panel');
   if (on) docsPanel.removeAttribute('hidden');
   else docsPanel.setAttribute('hidden', '');
   setPanelBtnActive('docs-btn', on);
+  if (on) renderDocList();
 }
 if (docsBtn) docsBtn.addEventListener('click', function () {
   if (!docsPanel) return;
-  var opening = docsPanel.hasAttribute('hidden');
-  setDocsOpen(opening);
-  if (opening) renderDocList();
+  setDocsOpen(docsPanel.hasAttribute('hidden'));
 });
 if (docsCloseBtn) docsCloseBtn.addEventListener('click', function () { setDocsOpen(false); });
 if (docsNewBtn) docsNewBtn.addEventListener('click', function () {
@@ -2312,18 +2438,9 @@ var templatesBtn = document.getElementById('templates-btn');
 var templatesCloseBtn = document.getElementById('templates-close-btn');
 if (templatesBtn) templatesBtn.addEventListener('click', function () {
   var panel = document.getElementById('templates-panel');
-  if (!panel) return;
-  var opening = panel.hasAttribute('hidden');
-  if (opening) panel.removeAttribute('hidden');
-  else panel.setAttribute('hidden', '');
-  setPanelBtnActive('templates-btn', opening);
-  if (opening) { renderTemplatesList(); renderSnippetsList(); }
+  if (panel) setTemplatesOpen(panel.hasAttribute('hidden'));
 });
-if (templatesCloseBtn) templatesCloseBtn.addEventListener('click', function () {
-  var panel = document.getElementById('templates-panel');
-  if (panel) panel.setAttribute('hidden', '');
-  setPanelBtnActive('templates-btn', false);
-});
+if (templatesCloseBtn) templatesCloseBtn.addEventListener('click', function () { setTemplatesOpen(false); });
 if (lintBtn) lintBtn.addEventListener('click', function () {
   var wasHidden = !lintPanel || lintPanel.hasAttribute('hidden');
   setLintOpen(!!wasHidden);
@@ -2339,22 +2456,30 @@ if (copyRichBtn) copyRichBtn.addEventListener('click', copyRichText);
 var cmdClose = document.getElementById('cmd-close');
 var cmdModal = document.getElementById('cmd-modal');
 var cmdInput = document.getElementById('cmd-input');
-if (cmdClose) cmdClose.addEventListener('click', function () { if (cmdModal) cmdModal.setAttribute('hidden', ''); });
-if (cmdModal) cmdModal.addEventListener('click', function (e) { if (e.target === cmdModal) cmdModal.setAttribute('hidden', ''); });
-if (cmdInput) cmdInput.addEventListener('keydown', function (e) {
-  if (e.key === 'Enter') {
-    var first = document.querySelector('#cmd-list .docs-item');
-    if (first) first.click();
-  } else if (e.key === 'Escape') {
-    if (cmdModal) cmdModal.setAttribute('hidden', '');
-    // Keep the overlay's document-level Esc handler from also closing the
-    // overlay when the user only wanted to dismiss the palette.
-    e.stopPropagation();
+if (cmdClose) cmdClose.addEventListener('click', closeCommandPalette);
+if (cmdModal) cmdModal.addEventListener('click', function (ev) { if (ev.target === cmdModal) closeCommandPalette(); });
+if (cmdModal) cmdModal.addEventListener('keydown', function (ev) {
+  // Modal semantics: keep global shortcuts (Alt+Z, Ctrl+K, overlay Esc) from
+  // firing behind the palette, and keep Tab inside it.
+  ev.stopPropagation();
+  if (ev.key === 'Escape') { ev.preventDefault(); closeCommandPalette(); }
+  else if (ev.key === 'Tab') {
+    ev.preventDefault();
+    var next = document.activeElement === cmdInput ? cmdClose : cmdInput;
+    if (next) next.focus();
+  }
+});
+if (cmdInput) cmdInput.addEventListener('keydown', function (ev) {
+  if (ev.key === 'ArrowDown') { ev.preventDefault(); moveCmdActive(1); }
+  else if (ev.key === 'ArrowUp') { ev.preventDefault(); moveCmdActive(-1); }
+  else if (ev.key === 'Enter') {
+    var cur = document.querySelector('#cmd-list .docs-item.active') || document.querySelector('#cmd-list .docs-item');
+    if (cur) cur.click();
   }
 });
 
 // Keyboard: Alt+1/2/3 switch views, Alt+Z toggles zen, Esc exits zen,
-// Ctrl/Cmd+Enter or Ctrl/Cmd+S copies.
+// Ctrl/Cmd+Enter copies (Ctrl/Cmd+S is left to the browser).
 // Arrow keys move between layout tabs when the tablist is focused.
 document.addEventListener('keydown', function (e) {
   var mod = e.ctrlKey || e.metaKey;
@@ -2390,7 +2515,7 @@ document.addEventListener('keydown', function (e) {
     openCommandPalette();
     return;
   }
-  if (mod && !e.altKey && (e.key === 'Enter' || e.key === 's' || e.key === 'S')) {
+  if (mod && !e.altKey && e.key === 'Enter') {
     e.preventDefault();
     copyBtn.click();
   }
@@ -2422,10 +2547,19 @@ editor.addEventListener('input', function () {
 });
 
 clearBtn.addEventListener('click', function () {
-  setText('');
-  renderNow();
-  saveDraft(true);
-  focusEditor();
+  if (!getText()) { focusEditor(); return; }
+  mdConfirm({
+    title: 'Clear the editor?',
+    message: 'All text in the editor will be removed. Save a snapshot first if you may want it back.',
+    confirmLabel: 'Clear',
+    tone: 'danger'
+  }).then(function (ok) {
+    if (!ok) { focusEditor(); return; }
+    setText('');
+    renderNow();
+    saveDraft(true);
+    focusEditor();
+  });
 });
 
 settingsBtn.addEventListener('click', function () {
@@ -2505,7 +2639,7 @@ function standaloneHtml() {
   return '<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n' +
     '<title>MarkLens export</title>\n<style>\n:root{' + vars + '}\n' +
     'body{background:var(--bg);color:var(--text);font-family:' +
-    (config.fontFamily || 'sans-serif') + ';font-size:' +
+    String(config.fontFamily || 'sans-serif').replace(/[<>{};]/g, '') + ';font-size:' +
     (config.fontSize || 14) + 'px;line-height:1.7;max-width:820px;margin:0 auto;padding:32px 24px;}\n' +
     'pre{background:var(--surface);padding:12px 14px;border-radius:8px;overflow:auto;}\n' +
     'code{font-family:Consolas,Menlo,monospace;}\n' +
@@ -2605,7 +2739,11 @@ function setZen(on) {
   document.body.classList.toggle('zen', !!on);
   if (zenBtn) zenBtn.classList.toggle('active', !!on);
   if (status) status.textContent = on ? 'Zen — Esc to exit' : 'Live';
+  var zenExit = document.getElementById('zen-exit');
+  if (zenExit) zenExit.hidden = !on; // focus stays in the editor; the button is for mouse / Tab
 }
+var zenExitBtn = document.getElementById('zen-exit');
+if (zenExitBtn) zenExitBtn.addEventListener('click', function () { setZen(false); focusEditor(); });
 
 if (zenBtn) zenBtn.addEventListener('click', function () {
   setZen(!document.body.classList.contains('zen'));
@@ -2669,6 +2807,7 @@ function clearPending() {
 // Already-open panel: react when a new selection arrives via context menu.
 chrome.storage.onChanged.addListener(function (changes, area) {
   if (area !== 'session') return;
+  if (FRAMED && document.body.classList.contains('locked')) return;
   if (changes.pendingHtml && changes.pendingHtml.newValue) {
     applyPendingHtmlToNewDoc(changes.pendingHtml.newValue);
     clearPending();
@@ -2682,7 +2821,7 @@ chrome.storage.onChanged.addListener(function (changes, area) {
 // + mode (single render below), then render. A pending context-menu selection
 // takes precedence over the restored view/mode; otherwise the autosaved draft
 // (if any) is restored so work survives a closed panel.
-loadConfig(function () {
+whenUnlocked(function () { loadConfig(function () {
   // Startup self-check: name any vendored global that failed to load so a
   // broken install shows a precise diagnosis instead of a blank preview.
   var need = ['marked', 'TurndownService', 'DOMPurify', 'MD_SIDEPANEL_THEMES', 'setupMarked', 'mdStorage', 'CodeMirror', 'mdDB'];
@@ -2742,4 +2881,4 @@ loadConfig(function () {
       renderDocList();
     });
   });
-});
+}); });
